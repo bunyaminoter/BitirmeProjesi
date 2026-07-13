@@ -1,0 +1,15 @@
+# Default Training Configuration
+epochs: 100
+batch_size: 8
+learning_rate: 0.0001
+weight_decay: 0.0001
+optimizer: "adamw"
+scheduler: "cosine"
+mixed_precision: true
+gradient_clip: 1.0
+num_workers: 4
+pin_memory: true
+early_stopping_patience: 15
+checkpoint_dir: "checkpoints/"
+log_every_n_steps: 10
+val_every_n_epochs: 1

@@ -1,0 +1,87 @@
+# =============================================================================
+# WLASL 100 — Google Colab GPU Training Configuration
+# =============================================================================
+# Use on Colab with GPU runtime. Pair with notebooks/train_wlasl_colab.ipynb
+# or:
+#   python scripts/train.py --config configs/experiment/wlasl100_colab.yaml \
+#       --data_root /content/drive/MyDrive/BitirmeProjesi \
+#       --cache_dir cache/features
+
+name: "wlasl100_colab"
+seed: 42
+device: "cuda"
+output_dir: "outputs/wlasl100_colab/"
+
+dataset:
+  name: "wlasl"
+  annotation_file: "nslt_100.json"
+  video_dir: "videos/"
+  num_classes: 100
+  num_frames: 16
+  class_list_file: "wlasl_class_list.txt"
+  train_split: "train"
+  val_split: "val"
+  test_split: "test"
+
+model:
+  num_classes: 100
+  classifier_dropout: 0.5
+
+  hand_encoder:
+    backbone: "resnet18"
+    pretrained: true
+    output_dim: 256
+    input_size: [224, 224]
+    shared_weights: true
+    dropout: 0.3
+
+  landmark_encoder:
+    input_dim: 99
+    hidden_dims: [256, 128]
+    output_dim: 256
+    dropout: 0.3
+    use_batch_norm: true
+    include_face: false
+    num_pose_landmarks: 33
+
+  fusion:
+    method: "concat"
+    output_dim: 512
+    dropout: 0.3
+    num_heads: 4
+
+  temporal:
+    method: "transformer"
+    hidden_dim: 256
+    num_layers: 2
+    dropout: 0.3
+    num_heads: 4
+    max_seq_len: 64
+
+training:
+  epochs: 100
+  batch_size: 16
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  optimizer: "adamw"
+  scheduler: "cosine"
+  mixed_precision: true
+  gradient_clip: 1.0
+  num_workers: 0
+  pin_memory: true
+  early_stopping_patience: 15
+  checkpoint_dir: "outputs/wlasl100_colab/checkpoints/"
+  log_every_n_steps: 10
+  val_every_n_epochs: 1
+
+augmentation:
+  enabled: true
+  random_crop: false
+  random_horizontal_flip: true
+  random_rotation: 0.0
+  random_brightness: 0.2
+  random_noise_std: 0.01
+  frame_drop_prob: 0.0
+  random_speed_range: [1.0, 1.0]
+  hand_random_blur: false
+  hand_random_translation: 0

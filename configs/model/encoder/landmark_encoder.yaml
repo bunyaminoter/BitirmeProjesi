@@ -1,0 +1,9 @@
+# Landmark Encoder Configuration
+input_dim: 99
+hidden_dims: [256, 128]
+output_dim: 256
+dropout: 0.3
+use_batch_norm: true
+include_face: false
+num_pose_landmarks: 33
+num_face_landmarks: 468

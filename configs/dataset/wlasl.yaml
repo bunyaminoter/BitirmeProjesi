@@ -1,0 +1,10 @@
+# WLASL Dataset Configuration
+name: "wlasl"
+annotation_file: "nslt_100.json"
+video_dir: "videos/"
+num_classes: 100
+num_frames: 16
+class_list_file: "wlasl_class_list.txt"
+train_split: "train"
+val_split: "val"
+test_split: "test"

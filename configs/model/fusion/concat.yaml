@@ -1,0 +1,5 @@
+# Concatenation Fusion Configuration
+method: "concat"
+output_dim: 512
+dropout: 0.3
+num_heads: 4

@@ -1,0 +1,7 @@
+# Hand CNN Encoder Configuration
+backbone: "resnet18"
+pretrained: true
+output_dim: 256
+input_size: [224, 224]
+shared_weights: true
+dropout: 0.3

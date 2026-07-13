@@ -1,0 +1,11 @@
+# Default Augmentation Configuration
+enabled: true
+random_crop: true
+random_horizontal_flip: true
+random_rotation: 15.0
+random_brightness: 0.2
+random_noise_std: 0.01
+frame_drop_prob: 0.1
+random_speed_range: [0.8, 1.2]
+hand_random_blur: true
+hand_random_translation: 10

@@ -1,0 +1,7 @@
+# BiLSTM Temporal Model Configuration
+method: "bilstm"
+hidden_dim: 256
+num_layers: 2
+dropout: 0.3
+num_heads: 4
+max_seq_len: 64

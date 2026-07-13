@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+.venv1/
+venv/
+venv1/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Training artifacts
+outputs/
+checkpoints/
+exports/
+cache/
+logs/
+runs/
+
+# Data (large files)
+videos/
+*.h5
+*.hdf5
+*.npz
+*.npy
+
+# OS
+Thumbs.db
+desktop.ini
+
+# MediaPipe models
+*.tflite
+*.task
