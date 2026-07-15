@@ -153,87 +153,92 @@ def main() -> None:
 
     try:
         for i, (video_id, info) in enumerate(filtered.items()):
-            # Skip already cached
-            if cache.exists(video_id):
-                skipped += 1
-                continue
-
-            video_path = Path(config.dataset.video_dir) / f"{video_id}.mp4"
-
-            if not video_path.exists():
-                skipped += 1
-                continue
-
-            # Get start/end frames
-            action = info.get("action", [0, 1, -1])
-            start_frame = action[1] if len(action) > 1 else 1
-            end_frame = action[2] if len(action) > 2 else -1
-
-            # Load and sample frames
-            frames = sample_frames(
-                str(video_path),
-                config.dataset.num_frames,
-                start_frame=start_frame,
-                end_frame=end_frame,
-            )
-
-            if not frames:
-                log.warning(f"Failed to read frames from existing video: {video_path}")
+            try:
+                # Skip already cached
+                if cache.exists(video_id):
+                    skipped += 1
+                    continue
+    
+                video_path = Path(config.dataset.video_dir) / f"{video_id}.mp4"
+    
+                if not video_path.exists():
+                    skipped += 1
+                    continue
+    
+                # Get start/end frames
+                action = info.get("action", [0, 1, -1])
+                start_frame = action[1] if len(action) > 1 else 1
+                end_frame = action[2] if len(action) > 2 else -1
+    
+                # Load and sample frames
+                frames = sample_frames(
+                    str(video_path),
+                    config.dataset.num_frames,
+                    start_frame=start_frame,
+                    end_frame=end_frame,
+                )
+    
+                if not frames:
+                    log.warning(f"Failed to read frames from existing video: {video_path}")
+                    errors += 1
+                    continue
+    
+                # Extract landmarks and crop hands for each frame
+                all_pose = []
+                all_left_hand = []
+                all_right_hand = []
+                all_left_crop = []
+                all_right_crop = []
+    
+                for frame in frames:
+                    # Extract landmarks
+                    result = extractor.extract(frame)
+    
+                    # Store pose landmarks (33, 3) or zeros
+                    if result.pose is not None:
+                        all_pose.append(result.pose)
+                    else:
+                        all_pose.append(np.zeros((33, 3), dtype=np.float32))
+    
+                    # Store hand landmarks (21, 3) or zeros
+                    if result.left_hand is not None:
+                        all_left_hand.append(result.left_hand)
+                    else:
+                        all_left_hand.append(np.zeros((21, 3), dtype=np.float32))
+    
+                    if result.right_hand is not None:
+                        all_right_hand.append(result.right_hand)
+                    else:
+                        all_right_hand.append(np.zeros((21, 3), dtype=np.float32))
+    
+                    # Crop hands
+                    left_crop, right_crop = cropper.crop_hands(frame, result)
+                    all_left_crop.append(left_crop.image)
+                    all_right_crop.append(right_crop.image)
+    
+                # Save to cache as .npz
+                features = {
+                    "pose_landmarks": np.stack(all_pose, axis=0),        # (T, 33, 3)
+                    "left_hand_landmarks": np.stack(all_left_hand, axis=0),  # (T, 21, 3)
+                    "right_hand_landmarks": np.stack(all_right_hand, axis=0),  # (T, 21, 3)
+                    "left_hand_crops": np.stack(all_left_crop, axis=0),    # (T, H, W, 3)
+                    "right_hand_crops": np.stack(all_right_crop, axis=0),  # (T, H, W, 3)
+                    "label": np.array(action[0], dtype=np.int64),
+                    "num_frames": np.array(len(frames), dtype=np.int64),
+                }
+    
+                cache.save(video_id, features)
+                processed += 1
+    
+                if (processed + skipped) % 50 == 0 or (i + 1) == total_videos:
+                    log.info(
+                        f"Progress: {i + 1}/{total_videos} "
+                        f"(processed={processed}, skipped={skipped}, errors={errors})"
+                    )
+            except Exception as e:
+                log.error(f"Error processing video {video_id}: {e}")
                 errors += 1
                 continue
-
-            # Extract landmarks and crop hands for each frame
-            all_pose = []
-            all_left_hand = []
-            all_right_hand = []
-            all_left_crop = []
-            all_right_crop = []
-
-            for frame in frames:
-                # Extract landmarks
-                result = extractor.extract(frame)
-
-                # Store pose landmarks (33, 3) or zeros
-                if result.pose is not None:
-                    all_pose.append(result.pose)
-                else:
-                    all_pose.append(np.zeros((33, 3), dtype=np.float32))
-
-                # Store hand landmarks (21, 3) or zeros
-                if result.left_hand is not None:
-                    all_left_hand.append(result.left_hand)
-                else:
-                    all_left_hand.append(np.zeros((21, 3), dtype=np.float32))
-
-                if result.right_hand is not None:
-                    all_right_hand.append(result.right_hand)
-                else:
-                    all_right_hand.append(np.zeros((21, 3), dtype=np.float32))
-
-                # Crop hands
-                left_crop, right_crop = cropper.crop_hands(frame, result)
-                all_left_crop.append(left_crop.image)
-                all_right_crop.append(right_crop.image)
-
-            # Save to cache as .npz
-            features = {
-                "pose_landmarks": np.stack(all_pose, axis=0),        # (T, 33, 3)
-                "left_hand_landmarks": np.stack(all_left_hand, axis=0),  # (T, 21, 3)
-                "right_hand_landmarks": np.stack(all_right_hand, axis=0),  # (T, 21, 3)
-                "left_hand_crops": np.stack(all_left_crop, axis=0),    # (T, H, W, 3)
-                "right_hand_crops": np.stack(all_right_crop, axis=0),  # (T, H, W, 3)
-                "label": np.array(action[0], dtype=np.int64),
-                "num_frames": np.array(len(frames), dtype=np.int64),
-            }
-
-            cache.save(video_id, features)
-            processed += 1
-
-            if (processed + skipped) % 50 == 0 or (i + 1) == total_videos:
-                log.info(
-                    f"Progress: {i + 1}/{total_videos} "
-                    f"(processed={processed}, skipped={skipped}, errors={errors})"
-                )
 
     except KeyboardInterrupt:
         log.info("Preprocessing interrupted by user.")
