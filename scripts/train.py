@@ -20,6 +20,7 @@ sys.path.insert(0, str(project_root))
 
 from src.core.config import ExperimentConfig, load_config
 from src.data.wlasl_datamodule import WLASLDataModule, collate_fn
+from src.data.asl_citizen_datamodule import ASLCitizenDataModule
 from src.evaluation.evaluator import Evaluator
 from src.models.hybrid_model import HybridASLModel
 from src.training.callbacks.checkpoint import CheckpointCallback
@@ -70,6 +71,35 @@ def main() -> None:
     # Load configuration
     config = load_config(args.config)
 
+    # --- Ortam tespiti ve yol düzeltme ---
+    # Colab ortamında Drive yollarını, Kaggle'da input yollarını otomatik çöz
+    import os
+    if os.path.exists("/content/drive"):
+        # Google Colab ortamı
+        drive_project = "/content/drive/MyDrive/BitirmeProjesi"
+        asl_data = f"{drive_project}/asl_citizen_data"
+        if os.path.isdir(f"{asl_data}/splits"):
+            config.dataset.annotation_file = f"{asl_data}/splits"
+        asl_vids = f"{drive_project}/asl_citizen_videos/ASL_Citizen/videos"
+        if os.path.isdir(asl_vids):
+            config.dataset.video_dir = asl_vids
+        else:
+            config.dataset.video_dir = f"{drive_project}/videos"
+        config.dataset.class_list_file = f"{drive_project}/cache/class_list.txt"
+        config.output_dir = f"{drive_project}/outputs/asl_citizen_baseline/"
+        config.training.checkpoint_dir = f"{drive_project}/outputs/asl_citizen_baseline/checkpoints/"
+        log_msg = "Colab"
+    elif os.path.exists("/kaggle/input"):
+        # Kaggle ortamı
+        config.dataset.annotation_file = "/kaggle/input/datasets/abd0kamel/asl-citizen/ASL_Citizen/splits"
+        config.dataset.video_dir = "/kaggle/input/datasets/abd0kamel/asl-citizen/ASL_Citizen/videos"
+        config.dataset.class_list_file = "/kaggle/working/cache/class_list.txt"
+        config.output_dir = "/kaggle/working/outputs/asl_citizen_baseline/"
+        config.training.checkpoint_dir = "/kaggle/working/outputs/asl_citizen_baseline/checkpoints/"
+        log_msg = "Kaggle"
+    else:
+        log_msg = "Local"
+
     # Setup
     logger = setup_logging(level="INFO")
     log = get_logger("train")
@@ -77,16 +107,24 @@ def main() -> None:
     device = get_device(config.device)
 
     log.info(f"Experiment: {config.name}")
+    log.info(f"Environment: {log_msg}")
     log.info(f"Device: {get_device_info(device)}")
     log.info(f"Seed: {config.seed}")
 
     # --- 1. Build DataModule ---
     log.info("Building DataModule...")
-    datamodule = WLASLDataModule(
-        dataset_config=config.dataset,
-        training_config=config.training,
-        cache_dir=args.cache_dir,
-    )
+    if config.dataset.name == "asl_citizen":
+        datamodule = ASLCitizenDataModule(
+            dataset_config=config.dataset,
+            training_config=config.training,
+            cache_dir=args.cache_dir,
+        )
+    else:
+        datamodule = WLASLDataModule(
+            dataset_config=config.dataset,
+            training_config=config.training,
+            cache_dir=args.cache_dir,
+        )
     datamodule.setup(stage="fit")
 
     train_loader = datamodule.train_dataloader()

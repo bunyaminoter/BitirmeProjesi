@@ -11,6 +11,8 @@ to enable.
 from __future__ import annotations
 
 import logging
+import urllib.request
+from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
@@ -95,6 +97,23 @@ class MediaPipeLandmarkExtractor(BaseLandmarkExtractor):
 
         models_dir = get_mediapipe_models_dir()
 
+        def _ensure_model(path_str: str, name: str) -> str:
+            p = Path(path_str)
+            if not p.exists():
+                p.parent.mkdir(parents=True, exist_ok=True)
+                url_map = {
+                    "pose_landmarker_lite.task": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+                    "pose_landmarker_full.task": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+                    "pose_landmarker_heavy.task": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task",
+                    "hand_landmarker.task": "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+                    "face_landmarker.task": "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                }
+                if name in url_map:
+                    import urllib.request
+                    logger.info(f"Downloading missing MediaPipe model ({name}) to {p}...")
+                    urllib.request.urlretrieve(url_map[name], p)
+            return str(p)
+
         # --- PoseLandmarker ---
         try:
             if self._pose_model_path:
@@ -107,7 +126,7 @@ class MediaPipeLandmarkExtractor(BaseLandmarkExtractor):
                     if self.model_complexity == 1
                     else "pose_landmarker_lite.task"
                 )
-                pose_model_path = str(models_dir / pose_model_name)
+                pose_model_path = _ensure_model(str(models_dir / pose_model_name), pose_model_name)
 
             pose_base = BaseOptions(model_asset_path=pose_model_path)
 
@@ -132,7 +151,7 @@ class MediaPipeLandmarkExtractor(BaseLandmarkExtractor):
             if self._hand_model_path:
                 hand_model_path = self._hand_model_path
             else:
-                hand_model_path = str(models_dir / "hand_landmarker.task")
+                hand_model_path = _ensure_model(str(models_dir / "hand_landmarker.task"), "hand_landmarker.task")
 
             hand_base = BaseOptions(model_asset_path=hand_model_path)
 
@@ -159,7 +178,7 @@ class MediaPipeLandmarkExtractor(BaseLandmarkExtractor):
                 if self._face_model_path:
                     face_model_path = self._face_model_path
                 else:
-                    face_model_path = str(models_dir / "face_landmarker.task")
+                    face_model_path = _ensure_model(str(models_dir / "face_landmarker.task"), "face_landmarker.task")
 
                 face_base = BaseOptions(model_asset_path=face_model_path)
 
