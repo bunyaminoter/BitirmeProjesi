@@ -114,6 +114,17 @@ class CachedASLCitizenDataset(Dataset):
         return torch.from_numpy(imgs)
 
 
+def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Custom collate function for the cached dataset."""
+    collated: Dict[str, Any] = {}
+    for key in batch[0].keys():
+        values = [sample[key] for sample in batch]
+        if isinstance(values[0], torch.Tensor):
+            collated[key] = torch.stack(values, dim=0)
+        else:
+            collated[key] = values
+    return collated
+
 class ASLCitizenDataModule(BaseDataModule):
     def __init__(
         self,
@@ -124,7 +135,6 @@ class ASLCitizenDataModule(BaseDataModule):
         hand_image_size: tuple[int, int] = (224, 224),
         landmark_dim: int = 99,
     ) -> None:
-        from src.data.wlasl_datamodule import collate_fn
         super().__init__(dataset_config, training_config, collate_fn=collate_fn)
         self.cache_dir = cache_dir
         self.augmentation_config = augmentation_config

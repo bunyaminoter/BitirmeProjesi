@@ -136,8 +136,8 @@ class DatasetConfig:
     """Configuration for dataset loading.
 
     Attributes:
-        name: Registered dataset name (e.g., 'wlasl').
-        annotation_file: Path to annotation file.
+        name: Registered dataset name (e.g., 'asl_citizen').
+        annotation_file: JSON or CSV file containing video annotations. file.
         video_dir: Directory containing video files.
         num_classes: Number of classes to use (e.g., 100, 300, 1000).
         num_frames: Number of frames to sample per video.
@@ -147,12 +147,11 @@ class DatasetConfig:
         test_split: Split name for test data.
     """
 
-    name: str = "wlasl"
-    annotation_file: str = "nslt_100.json"
-    video_dir: str = "videos/"
-    num_classes: int = 100
-    num_frames: int = 16
-    class_list_file: str = "wlasl_class_list.txt"
+    name: str = "asl_citizen"
+    annotation_file: str = "asl_citizen_100.json"
+    data_dir: str = "videos"
+    cache_dir: str = "cache/features"
+    class_list_file: str = "asl_citizen_class_list.txt"
     train_split: str = "train"
     val_split: str = "val"
     test_split: str = "test"

@@ -6,7 +6,7 @@ dataset and caches results to disk. This should be run once before
 training to avoid repeated MediaPipe calls.
 
 Usage:
-    python scripts/preprocess.py --config configs/experiment/wlasl100_baseline.yaml --cache_dir cache/features/
+    python scripts/preprocess.py --config configs/experiment/asl_citizen_100.yaml --cache_dir cache/features/
 """
 
 from __future__ import annotations

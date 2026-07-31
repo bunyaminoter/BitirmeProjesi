@@ -4,8 +4,8 @@ Training entry point.
 Loads configuration, builds all components, and starts training.
 
 Usage:
-    python scripts/train.py --config configs/experiment/wlasl100_baseline.yaml
-    python scripts/train.py --config configs/experiment/wlasl100_baseline.yaml --resume checkpoints/last.pt
+    python scripts/train.py --config configs/experiment/asl_citizen_100.yaml
+    python scripts/train.py --config configs/experiment/asl_citizen_100.yaml --resume checkpoints/last.pt
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.core.config import ExperimentConfig, load_config
-from src.data.wlasl_datamodule import WLASLDataModule, collate_fn
 from src.data.asl_citizen_datamodule import ASLCitizenDataModule
 from src.evaluation.evaluator import Evaluator
 from src.models.hybrid_model import HybridASLModel
@@ -113,18 +112,11 @@ def main() -> None:
 
     # --- 1. Build DataModule ---
     log.info("Building DataModule...")
-    if config.dataset.name == "asl_citizen":
-        datamodule = ASLCitizenDataModule(
-            dataset_config=config.dataset,
-            training_config=config.training,
-            cache_dir=args.cache_dir,
-        )
-    else:
-        datamodule = WLASLDataModule(
-            dataset_config=config.dataset,
-            training_config=config.training,
-            cache_dir=args.cache_dir,
-        )
+    datamodule = ASLCitizenDataModule(
+        dataset_config=config.dataset,
+        training_config=config.training,
+        cache_dir=args.cache_dir,
+    )
     datamodule.setup(stage="fit")
 
     train_loader = datamodule.train_dataloader()

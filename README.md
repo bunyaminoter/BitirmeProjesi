@@ -102,25 +102,25 @@ pip install -r requirements.txt
 MediaPipe işlemlerinin eğitim sırasında tekrar tekrar yapılması eğitimi çok yavaşlatır. Bu yüzden eğitimden **önce** verileri bir kez işleyip önbelleğe (`cache/`) kaydediyoruz.
 
 ```powershell
-python scripts/preprocess.py --config configs/experiment/wlasl100_baseline.yaml --cache_dir cache/features/
+python scripts/preprocess.py --config configs/experiment/asl_citizen_100.yaml --cache_dir cache/features/
 ```
 
 ### 4. Eğitimi Başlatma
 
 ```powershell
-python scripts/train.py --config configs/experiment/wlasl100_baseline.yaml
+python scripts/train.py --config configs/experiment/asl_citizen_100.yaml
 ```
 
 ### 5. Modeli Değerlendirme (Test)
 
 ```powershell
-python scripts/evaluate.py --config configs/experiment/wlasl100_baseline.yaml --checkpoint outputs/wlasl100_baseline/checkpoints/best_model.pt
+python scripts/evaluate.py --config configs/experiment/asl_citizen_100.yaml --checkpoint outputs/asl_citizen_100/checkpoints/best_model.pt
 ```
 
 ### 6. Tek Bir Video Üzerinde Deneme (Inference)
 
 ```powershell
-python scripts/inference.py --config configs/experiment/wlasl100_baseline.yaml --checkpoint outputs/wlasl100_baseline/checkpoints/best_model.pt --video videolar_klasoru/ornek_video.mp4
+python scripts/inference.py --config configs/experiment/asl_citizen_100.yaml --checkpoint outputs/asl_citizen_100/checkpoints/best_model.pt --video videolar_klasoru/ornek_video.mp4
 ```
 
 ---
@@ -129,14 +129,14 @@ python scripts/inference.py --config configs/experiment/wlasl100_baseline.yaml -
 
 Bütün bir veri setini (100 veya 1000 kelimelik versiyonları) doğrudan eğitmek bilgisayarınızın gücüne göre saatler hatta günler sürebilir. Sistemi tam anlamıyla eğitmeye başlamadan önce; kodların, veri akışının ve eğitim döngüsünün hatasız çalıştığını doğrulamak için **ufak bir alt kümeyle (örneğin sadece ilk 5 kelimeyle)** deneme yapmanız en iyi yoldur.
 
-Sistem kodlaması (`src/data/datasets/wlasl_dataset.py`), YAML dosyasında belirttiğiniz sınıf (kelime) sayısına göre verileri otomatik olarak filtreleyecek şekilde tasarlanmıştır.
+Sistem kodlaması (`src/data/datasets/asl_citizen_dataset.py`), YAML dosyasında belirttiğiniz sınıf (kelime) sayısına göre verileri otomatik olarak filtreleyecek şekilde tasarlanmıştır.
 
-1. `configs/experiment/wlasl100_baseline.yaml` dosyasını açın.
+1. `configs/experiment/asl_citizen_100.yaml` dosyasını açın.
 2. `dataset` ayarlarındaki `num_classes` değerini **5** olarak değiştirin:
    ```yaml
    dataset:
-     name: "wlasl"
-     annotation_file: "nslt_100.json"
+     name: "asl_citizen"
+     annotation_file: "asl_citizen_100.json"
      num_classes: 5   # Sadece listedeki ilk 5 kelimenin videoları alınacak
    ```
 3. Aynı şekilde `model` ayarlarındaki çıktı sayısını da güncelleyin:
@@ -154,8 +154,8 @@ Eğer bu süreç hatasız tamamlanıyorsa projenizin mimarisi tamamen çalışı
 
 Eğitim sırasında verilerin hangi videoda olduğu ve bu videolarda hangi hareketin yapıldığı JSON ve TXT dosyaları üzerinden yönetilir. Modelin verileri nasıl okuduğunu anlamak için bu dosyaların mantığı önemlidir:
 
-- **`wlasl_class_list.txt`**: Bu dosya, kelimelerin (sınıfların) sayısal indeks karşılıklarını tutar (Örnek: `0 book`, `1 drink`). Model metinlerden değil sayılardan anladığı için, tahminleri yaparken bu indeksleri (0, 1, 2...) kullanır.
-- **`nslt_100.json`**: Model eğitiminde **ana rehber olarak kullanılan** dosyadır. Dosyanın içeriği aşağıdaki gibidir:
+- **`asl_citizen_class_list.txt`**: Bu dosya, kelimelerin (sınıfların) sayısal indeks karşılıklarını tutar (Örnek: `0 book`, `1 drink`). Model metinlerden değil sayılardan anladığı için, tahminleri yaparken bu indeksleri (0, 1, 2...) kullanır.
+- **`asl_citizen_100.json`**: Model eğitiminde **ana rehber olarak kullanılan** dosyadır. Dosyanın içeriği aşağıdaki gibidir:
   ```json
   "69241": {
       "subset": "train",
@@ -165,11 +165,11 @@ Eğitim sırasında verilerin hangi videoda olduğu ve bu videolarda hangi harek
   - **`69241`**: Bu ID, projenizde yer alan `videos/69241.mp4` adlı videoyu ifade eder.
   - **`subset`**: Bu videonun eğitim (`train`), doğrulama (`val`) veya test (`test`) verisi olarak mı kullanılacağını belirtir. Model eğitimde `train` videolarını kullanır ve `val` videoları ile başarısını ölçer.
   - **`action: [0, 1, -1]`**: 
-    - `0`: Videodaki hareketin Sınıf İndeksini belirtir (`wlasl_class_list.txt` dosyasına göre 0 = "book").
+    - `0`: Videodaki hareketin Sınıf İndeksini belirtir (`asl_citizen_class_list.txt` dosyasına göre 0 = "book").
     - `1`: İşaretin başladığı kare (frame) numarası.
     - `-1`: İşaretin bittiği kare numarası (-1 ise videonun sonuna kadar işaret dili devam ediyor demektir).
 
-Model `wlasl_dataset.py` dosyası içerisinde bu JSON yapısını satır satır okur, `subset` bilgisiyle veriyi böler ve videoları `action` dizisindeki sınıf etiketine eşleyerek eğitime sokar. Eğer veri setinize kendi özel kelimelerinizi ve videolarınızı eklerseniz, yapmanız gereken tek şey JSON dosyasına bu formata uygun yeni bir kayıt girmek ve kelimeyi TXT listesine eklemektir.
+Model `asl_citizen_dataset.py` dosyası içerisinde bu JSON yapısını satır satır okur, `subset` bilgisiyle veriyi böler ve videoları `action` dizisindeki sınıf etiketine eşleyerek eğitime sokar. Eğer veri setinize kendi özel kelimelerinizi ve videolarınızı eklerseniz, yapmanız gereken tek şey JSON dosyasına bu formata uygun yeni bir kayıt girmek ve kelimeyi TXT listesine eklemektir.
 
 ---
 

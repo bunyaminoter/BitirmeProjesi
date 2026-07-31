@@ -155,7 +155,7 @@ class SampleMetadata:
         label: Integer class label.
         gloss: Human-readable sign label (e.g., 'hello').
         split: Dataset split ('train', 'val', 'test').
-        start_frame: Starting frame index (1-indexed for WLASL).
+        start_frame: Starting frame index (1-indexed).
         end_frame: Ending frame index.
         signer_id: Optional signer identifier for signer-independent splits.
     """

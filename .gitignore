@@ -49,3 +49,14 @@ desktop.ini
 # MediaPipe models
 *.tflite
 *.task
+
+# Additional ignores from parent
+*.mp4
+*.tmp
+*.log
+.env
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

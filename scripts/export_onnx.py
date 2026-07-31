@@ -4,7 +4,7 @@ ONNX export script.
 Exports a trained model to ONNX format for deployment.
 
 Usage:
-    python scripts/export_onnx.py --config configs/experiment/wlasl100_baseline.yaml --checkpoint checkpoints/best_model.pt --output model.onnx
+    python scripts/export_onnx.py --config configs/experiment/asl_citizen_100.yaml --checkpoint checkpoints/best_model.pt --output model.onnx
 """
 
 from __future__ import annotations

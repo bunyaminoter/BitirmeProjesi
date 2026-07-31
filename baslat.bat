@@ -42,7 +42,7 @@ cls
 echo.
 echo [ISLEM] Veri On Isleme (Preprocess) Baslatiliyor...
 echo.
-python scripts\preprocess.py --config configs\experiment\wlasl100_baseline.yaml --cache_dir cache\features\
+python scripts\preprocess.py --config configs\experiment\asl_citizen_100.yaml --cache_dir cache\features\
 echo.
 pause
 goto menu
@@ -52,7 +52,7 @@ cls
 echo.
 echo [ISLEM] Egitim (Train) Baslatiliyor...
 echo.
-python scripts\train.py --config configs\experiment\wlasl100_baseline.yaml
+python scripts\train.py --config configs\experiment\asl_citizen_100.yaml
 echo.
 pause
 goto menu
@@ -63,7 +63,7 @@ echo.
 echo [ISLEM] Degerlendirme (Evaluate) Baslatiliyor...
 echo (Varsayilan olarak best_model.pt kullanilir)
 echo.
-python scripts\evaluate.py --config configs\experiment\wlasl100_baseline.yaml --checkpoint outputs\wlasl100_baseline\checkpoints\best_model.pt
+python scripts\evaluate.py --config configs\experiment\asl_citizen_100.yaml --checkpoint outputs\asl_citizen_100\checkpoints\best_model.pt
 echo.
 pause
 goto menu
@@ -75,7 +75,7 @@ echo [ISLEM] Cikarim (Inference) Baslatiliyor...
 echo Lutfen test etmek istediginiz videonun yolunu yazin (orn: videos\05237.mp4)
 set /p video_path="Video Yolu: "
 echo.
-python scripts\inference.py --config configs\experiment\wlasl100_baseline.yaml --checkpoint outputs\wlasl100_baseline\checkpoints\best_model.pt --video "%video_path%"
+python scripts\inference.py --config configs\experiment\asl_citizen_100.yaml --checkpoint outputs\asl_citizen_100\checkpoints\best_model.pt --video "%video_path%"
 echo.
 pause
 goto menu

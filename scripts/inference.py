@@ -5,7 +5,7 @@ Runs the full pipeline on a single video file and outputs the
 predicted sign label.
 
 Usage:
-    python scripts/inference.py --config configs/experiment/wlasl100_baseline.yaml --checkpoint checkpoints/best_model.pt --video path/to/video.mp4
+    python scripts/inference.py --config configs/experiment/asl_citizen_100.yaml --checkpoint checkpoints/best_model.pt --video path/to/video.mp4
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def load_class_names(class_list_file: str) -> dict[int, str]:
     """Load class index to name mapping.
 
     Args:
-        class_list_file: Path to wlasl_class_list.txt.
+        class_list_file: Path to class list txt file.
 
     Returns:
         Dictionary mapping class index to gloss name.

@@ -1,5 +1,5 @@
 """
-Utilities for parsing WLASL class list files.
+Utilities for parsing class list files.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from typing import Dict, Tuple
 
 
 def load_class_list(class_list_file: str | Path) -> Tuple[Dict[str, int], Dict[int, str]]:
-    """Load WLASL class mappings from wlasl_class_list.txt.
+    """Load class mappings from a class list text file.
 
     Supports both formats:
         0 book

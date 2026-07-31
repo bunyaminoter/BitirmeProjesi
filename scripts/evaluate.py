@@ -4,7 +4,7 @@ Evaluation entry point.
 Loads a trained model checkpoint and evaluates on the test split.
 
 Usage:
-    python scripts/evaluate.py --config configs/experiment/wlasl100_baseline.yaml --checkpoint checkpoints/best_model.pt
+    python scripts/evaluate.py --config configs/experiment/asl_citizen_100.yaml --checkpoint checkpoints/best_model.pt
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.core.config import load_config
-from src.data.wlasl_datamodule import WLASLDataModule
+from src.data.asl_citizen_datamodule import ASLCitizenDataModule
 from src.evaluation.evaluator import Evaluator
 from src.models.hybrid_model import HybridASLModel
 from src.utils.device import get_device
@@ -54,7 +54,7 @@ def main() -> None:
     log.info(f"Checkpoint: {args.checkpoint}")
 
     # --- 1. Build DataModule ---
-    datamodule = WLASLDataModule(
+    datamodule = ASLCitizenDataModule(
         dataset_config=config.dataset,
         training_config=config.training,
         cache_dir=args.cache_dir,
