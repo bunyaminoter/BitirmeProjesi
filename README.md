@@ -1,3 +1,13 @@
+---
+title: ASL API
+emoji: 🤟
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🤟 Hibrit Gerçek Zamanlı ASL Tanıma Sistemi
 
 **RGB el özellikleri ve vücut landmark özelliklerini (işaretlerini) birlikte kullanarak Amerikan İşaret Dilini (ASL) tanıyan, araştırmaya yönelik ve üretime (production) hazır kalitede bir altyapı.**
