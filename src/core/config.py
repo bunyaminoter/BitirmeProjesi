@@ -150,6 +150,9 @@ class DatasetConfig:
     name: str = "asl_citizen"
     annotation_file: str = "asl_citizen_100.json"
     data_dir: str = "videos"
+    video_dir: Optional[str] = "videos"
+    num_classes: Optional[int] = 10
+    num_frames: Optional[int] = 16
     cache_dir: str = "cache/features"
     class_list_file: str = "asl_citizen_class_list.txt"
     train_split: str = "train"
