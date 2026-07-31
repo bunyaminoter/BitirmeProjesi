@@ -343,11 +343,13 @@ def init_server(config_path: str, checkpoint_path: str):
             chk_path = fallback
 
     logger.info(f"Loading model weights from: {chk_path}")
-    checkpoint = torch.load(chk_path, map_location=device, weights_only=False)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.eval()
-
-    logger.info("Model loaded and ready for predictions!")
+    try:
+        checkpoint = torch.load(chk_path, map_location=device, weights_only=False)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        model.eval()
+        logger.info("Model loaded and ready for predictions!")
+    except Exception as e:
+        logger.error(f"Error loading checkpoint weights: {e}")
 
 
 def main():

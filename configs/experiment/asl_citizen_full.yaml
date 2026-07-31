@@ -6,7 +6,6 @@ output_dir: "outputs/asl_citizen_full/"
 dataset:
   name: "asl_citizen"
   annotation_file: "splits"
-  video_dir: "videos"
   num_classes: 2731
   num_frames: 24
   class_list_file: "cache/class_list_full.txt"
