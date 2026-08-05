@@ -30,8 +30,11 @@ import src.models.encoders.hand_cnn_encoder  # noqa: F401
 import src.models.encoders.landmark_encoder  # noqa: F401
 import src.models.fusion.concat_fusion  # noqa: F401
 import src.models.fusion.gated_fusion  # noqa: F401
+import src.models.fusion.cross_attention_fusion  # noqa: F401
 import src.models.temporal.bilstm_temporal  # noqa: F401
 import src.models.temporal.transformer_temporal  # noqa: F401
+import src.models.temporal.tcn_transformer  # noqa: F401
+import src.models.encoders.stgcn_encoder  # noqa: F401
 
 
 class HybridASLModel(nn.Module):
@@ -66,8 +69,9 @@ class HybridASLModel(nn.Module):
         self.config = config
 
         # --- Branch 1: Landmark Encoder ---
+        encoder_type = getattr(config.landmark_encoder, "encoder_type", "landmark_mlp")
         self.landmark_encoder: nn.Module = ENCODER_REGISTRY.build(
-            "landmark_mlp",
+            encoder_type,
             config=config.landmark_encoder,
         )
         landmark_out_dim = config.landmark_encoder.output_dim

@@ -1,0 +1,75 @@
+name: "asl_citizen_100_stgcn"
+seed: 42
+device: "auto"
+output_dir: "outputs/asl_citizen_100_stgcn/"
+
+dataset:
+  name: "asl_citizen"
+  annotation_file: "splits"
+  num_classes: 100
+  num_frames: 24
+  class_list_file: "cache/class_list_100.txt"
+  train_split: "train"
+  val_split: "val"
+  test_split: "test"
+
+model:
+  num_classes: 100
+  classifier_dropout: 0.5
+  hand_encoder:
+    backbone: "efficientnet_b0"
+    pretrained: true
+    output_dim: 512
+    input_size: [224, 224]
+    shared_weights: true
+    dropout: 0.3
+    use_cbam: true
+  landmark_encoder:
+    encoder_type: "landmark_stgcn"
+    input_dim: 99
+    gcn_channels: [64, 128, 256]
+    output_dim: 512
+    dropout: 0.2
+    use_batch_norm: true
+    include_face: false
+    num_pose_landmarks: 33
+  fusion:
+    method: "cross_attention"
+    output_dim: 1024
+    dropout: 0.1
+    num_heads: 8
+  temporal:
+    method: "tcn_transformer"
+    hidden_dim: 512
+    num_layers: 4
+    dropout: 0.3
+    num_heads: 8
+    max_seq_len: 64
+
+training:
+  epochs: 200
+  batch_size: 24
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  optimizer: "adamw"
+  scheduler: "cosine"
+  mixed_precision: true
+  gradient_clip: 1.0
+  num_workers: 4
+  pin_memory: true
+  early_stopping_patience: 25
+  checkpoint_dir: "outputs/asl_citizen_100_stgcn/checkpoints/"
+  log_every_n_steps: 50
+  val_every_n_epochs: 1
+
+augmentation:
+  enabled: true
+  random_crop: true
+  random_horizontal_flip: true
+  random_rotation: 15.0
+  random_brightness: 0.2
+  random_noise_std: 0.01
+  frame_drop_prob: 0.1
+  random_speed_range: [0.8, 1.2]
+  hand_random_blur: true
+  hand_random_translation: 10

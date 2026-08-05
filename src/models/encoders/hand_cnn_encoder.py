@@ -20,6 +20,7 @@ import torchvision.models as tv_models
 from src.core.config import HandEncoderConfig
 from src.core.registry import ENCODER_REGISTRY
 from src.models.encoders.base_encoder import BaseEncoder
+from src.models.attention.cbam import CBAMBlock
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ _BACKBONE_REGISTRY: Dict[str, tuple] = {
 
 
 def _build_backbone(
-    name: str, pretrained: bool
+    name: str, pretrained: bool, use_cbam: bool = False
 ) -> tuple[nn.Module, int]:
     """Build a torchvision backbone and return (feature_extractor, out_dim).
 
@@ -116,6 +117,23 @@ def _build_backbone(
         )
     else:
         raise ValueError(f"No feature extraction logic for backbone '{name}'")
+        
+    if use_cbam:
+        # Insert CBAM right before the AdaptiveAvgPool2d
+        # Find index of AdaptiveAvgPool2d
+        pool_idx = -1
+        for i, layer in enumerate(features):
+            if isinstance(layer, nn.AdaptiveAvgPool2d):
+                pool_idx = i
+                break
+                
+        if pool_idx != -1:
+            # We recreate the Sequential block with CBAM inserted
+            new_layers = list(features[:pool_idx])
+            new_layers.append(CBAMBlock(in_planes=out_dim))
+            new_layers.extend(list(features[pool_idx:]))
+            features = nn.Sequential(*new_layers)
+            logger.info(f"Injected CBAM block before pooling layer in {name}")
 
     return features, out_dim
 
@@ -153,7 +171,7 @@ class HandCNNEncoder(BaseEncoder):
 
         # Build real torchvision backbone
         self.backbone, backbone_out_dim = _build_backbone(
-            config.backbone, config.pretrained
+            config.backbone, config.pretrained, getattr(config, "use_cbam", False)
         )
 
         # Projection head: maps backbone features to desired output_dim

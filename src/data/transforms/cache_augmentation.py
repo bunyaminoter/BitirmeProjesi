@@ -33,8 +33,8 @@ class CacheAugmentation:
             left = self._jitter_brightness(left)
             right = self._jitter_brightness(right)
 
-        if self.config.random_noise_std > 0:
-            noise = torch.randn_like(pose) * self.config.random_noise_std
+        if getattr(self.config, "pose_jitter_std", 0.0) > 0:
+            noise = torch.randn_like(pose) * self.config.pose_jitter_std
             pose = pose + noise
 
         sample = dict(sample)

@@ -38,6 +38,7 @@ class HandEncoderConfig:
     input_size: List[int] = field(default_factory=lambda: [224, 224])
     shared_weights: bool = True
     dropout: float = 0.3
+    use_cbam: bool = False
 
 
 @dataclass
@@ -56,6 +57,8 @@ class LandmarkEncoderConfig:
     """
 
     input_dim: int = 99  # 33 pose * 3
+    encoder_type: str = "landmark_mlp"  # "landmark_mlp" or "landmark_stgcn"
+    gcn_channels: List[int] = field(default_factory=lambda: [64, 128, 256])
     hidden_dims: List[int] = field(default_factory=lambda: [256, 128])
     output_dim: int = 256
     dropout: float = 0.3
@@ -187,6 +190,7 @@ class AugmentationConfig:
     random_speed_range: List[float] = field(default_factory=lambda: [0.8, 1.2])
     hand_random_blur: bool = True
     hand_random_translation: int = 10
+    pose_jitter_std: float = 0.01
 
 
 # ============================================================================
