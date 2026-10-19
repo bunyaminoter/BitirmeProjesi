@@ -5,7 +5,7 @@ Provides REST API endpoints for the Flutter mobile app to run predictions
 using the trained HybridASLModel.
 
 Usage:
-    python scripts/server.py --config configs/experiment/asl_citizen_baseline.yaml --checkpoint outputs/asl_citizen_baseline/checkpoints/best_model.pt --port 8000
+    python scripts/server.py --config configs/experiment/autsl_10_mobilenet.yaml --checkpoint outputs/autsl_10_mobilenet/checkpoints/best_model.pt --port 8000
 """
 
 from __future__ import annotations
@@ -266,10 +266,10 @@ async def predict_video(
     contents = await file.read()
     file_size = len(contents)
     
-    print(f"\n[SERVER API] 📥 İstek alındı! Dosya: {file.filename}, Boyut: {file_size} bytes ({file_size / 1024:.1f} KB)")
+    print(f"\n[SERVER API] [+] Istek alindi! Dosya: {file.filename}, Boyut: {file_size} bytes ({file_size / 1024:.1f} KB)")
 
     if not contents or file_size == 0:
-        print("[SERVER API] ❌ HATA: Boş video dosyası alındı (0 bytes)!")
+        print("[SERVER API] [ERROR] Bos video dosyasi alindi (0 bytes)!")
         raise HTTPException(
             status_code=400, 
             detail="Boş video dosyası alındı (0 bytes). Kameradan video kaydı alınamamış olabilir."
@@ -277,19 +277,19 @@ async def predict_video(
 
     frames = sample_frames_from_bytes(contents, config.dataset.num_frames)
     if not frames:
-        print(f"[SERVER API] ❌ HATA: Video kareleri okunamadı ({file_size} bytes)! OpenCV MP4 formatını çözemedi.")
+        print(f"[SERVER API] [ERROR] Video kareleri okunamadi ({file_size} bytes)! OpenCV MP4 formatini cozemedi.")
         raise HTTPException(
             status_code=400, 
             detail=f"Video kareleri okunamadı ({file_size / 1024:.1f} KB). OpenCV MP4 formatını çözemedi."
         )
 
-    print(f"[SERVER API] 🎞️ {len(frames)} adet kare başarıyla okundu. Görsel boyutu: {frames[0].shape}. Model çıkarımı başlatılıyor...")
+    print(f"[SERVER API] [*] {len(frames)} adet kare basariyla okundu. Gorsel boyutu: {frames[0].shape}. Model cikarimi baslatiliyor...")
     results = run_model_inference(frames, top_k_val=top_k)
     elapsed_ms = int((time.time() - start_time) * 1000)
 
     if results:
         top_res = results[0]
-        print(f"[SERVER API] ✅ Tahmin Tamamlandı! En yüksek: {top_res['label']} (%{top_res['confidence']*100:.1f}) - Süre: {elapsed_ms}ms\n")
+        print(f"[SERVER API] [SUCCESS] Tahmin Tamamlandi! En yuksek: {top_res['label']} (%{top_res['confidence']*100:.1f}) - Sure: {elapsed_ms}ms\n")
 
     return PredictionResponse(
         predictions=[PredictionItem(**item) for item in results],
@@ -297,18 +297,79 @@ async def predict_video(
     )
 
 
+@app.post("/predict_frames", response_model=PredictionResponse)
+async def predict_from_frames(
+    frames: list[UploadFile] = File(...),
+    top_k: int = 5,
+):
+    """Predict sign language label from uploaded JPEG frame images.
+
+    This endpoint is optimized for the continuous recognition mode where
+    the mobile app buffers frames during motion and sends them directly
+    as JPEG images, bypassing video encoding/decoding overhead.
+    """
+    if model is None:
+        raise HTTPException(status_code=500, detail="Model yuklu degil (Server initialization failed).")
+
+    start_time = time.time()
+
+    print(f"\n[SERVER API] [+] Frame-based istek alindi! {len(frames)} frame")
+
+    if not frames:
+        raise HTTPException(status_code=400, detail="Bos frame listesi alindi.")
+
+    # JPEG frame'leri RGB numpy array'lere donustur
+    rgb_frames = []
+    for i, frame_file in enumerate(frames):
+        try:
+            content = await frame_file.read()
+            if not content:
+                continue
+
+            # JPEG bytes -> numpy array (OpenCV ile decode)
+            nparr = np.frombuffer(content, np.uint8)
+            img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img_bgr is not None:
+                img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+                rgb_frames.append(img_rgb)
+        except Exception as e:
+            print(f"[SERVER API] [WARN] Frame {i} decode hatasi: {e}")
+            continue
+
+    if not rgb_frames:
+        raise HTTPException(status_code=400, detail="Hicbir frame decode edilemedi.")
+
+    # Model'in beklediği frame sayısına uydur (linspace sampling)
+    num_model_frames = config.dataset.num_frames
+    if len(rgb_frames) > num_model_frames:
+        indices = np.linspace(0, len(rgb_frames) - 1, num_model_frames, dtype=int).tolist()
+        rgb_frames = [rgb_frames[i] for i in indices]
+
+    print(f"[SERVER API] [*] {len(rgb_frames)} frame hazir. Model cikarimi baslatiliyor...")
+    results = run_model_inference(rgb_frames, top_k_val=top_k)
+    elapsed_ms = int((time.time() - start_time) * 1000)
+
+    if results:
+        top_res = results[0]
+        print(f"[SERVER API] [SUCCESS] Tahmin Tamamlandi! En yuksek: {top_res['label']} (%{top_res['confidence']*100:.1f}) - Sure: {elapsed_ms}ms\n")
+
+    return PredictionResponse(
+        predictions=[PredictionItem(**item) for item in results],
+        inferenceTimeMs=elapsed_ms,
+    )
+
 def parse_args():
     parser = argparse.ArgumentParser(description="ASL Inference Server")
     parser.add_argument(
         "--config",
         type=str,
-        default="configs/experiment/asl_citizen_baseline.yaml",
+        default="configs/experiment/autsl_10_mobilenet.yaml",
         help="Path to experiment config YAML.",
     )
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="outputs/asl_citizen_baseline/checkpoints/best_model.pt",
+        default="outputs/autsl_10_mobilenet/checkpoints/best_model.pt",
         help="Path to trained model checkpoint.",
     )
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address.")
@@ -338,7 +399,7 @@ def init_server(config_path: str, checkpoint_path: str):
     chk_path = Path(checkpoint_path)
     if not chk_path.exists():
         logger.warning(f"Checkpoint file not found at: {checkpoint_path}. Searching default paths...")
-        fallback = Path("outputs/asl_citizen_baseline/checkpoints/best_model.pt")
+        fallback = Path("outputs/autsl_10_mobilenet/checkpoints/best_model.pt")
         if fallback.exists():
             chk_path = fallback
 

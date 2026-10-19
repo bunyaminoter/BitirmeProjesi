@@ -80,6 +80,7 @@ class TCNTransformerTemporal(BaseTemporal):
         self.transformer = nn.TransformerEncoder(
             encoder_layers,
             num_layers=config.num_layers,
+            enable_nested_tensor=False,
         )
 
         self.layer_norm = nn.LayerNorm(d_model)
@@ -140,7 +141,7 @@ class TCNTransformerTemporal(BaseTemporal):
         if mask is not None:
             # Add True for CLS token (always valid)
             cls_mask = torch.ones(B, 1, dtype=torch.bool, device=mask.device)
-            src_key_padding_mask = ~torch.cat([cls_mask, mask], dim=1)
+            src_key_padding_mask = ~torch.cat([cls_mask, mask.bool()], dim=1)
             
         out = self.transformer(
             x,

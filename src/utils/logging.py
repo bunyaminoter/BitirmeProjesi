@@ -27,9 +27,7 @@ def setup_logging(
     Returns:
         Configured root logger.
     """
-    logger = logging.getLogger("asl")
-    logger.setLevel(getattr(logging, level.upper(), logging.INFO))
-    logger.handlers.clear()
+    log_level = getattr(logging, level.upper(), logging.INFO)
 
     formatter = logging.Formatter(
         "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
@@ -53,13 +51,20 @@ def setup_logging(
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)
 
-    logger.addHandler(console_handler)
+    # Configure root logger so all modules (src.training.trainer, etc.) output logs
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    root_logger.handlers.clear()
+    root_logger.addHandler(console_handler)
+
+    logger = logging.getLogger("asl")
+    logger.setLevel(log_level)
 
     # File handler
     if log_file:
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
+        root_logger.addHandler(file_handler)
 
     return logger
 

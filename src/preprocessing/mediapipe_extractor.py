@@ -205,6 +205,21 @@ class MediaPipeLandmarkExtractor(BaseLandmarkExtractor):
             f"Face: {self._face_landmarker is not None}"
         )
 
+    def ensure_required_models(self) -> None:
+        """Stop preprocessing if either required feature extractor is unavailable."""
+        if not self._initialized:
+            self._initialize()
+        missing = []
+        if self._pose_landmarker is None:
+            missing.append("pose")
+        if self._hand_landmarker is None:
+            missing.append("hand")
+        if missing:
+            raise RuntimeError(
+                "MediaPipe model initialization failed for " + ", ".join(missing)
+                + "; preprocessing would otherwise cache empty features."
+            )
+
     def _landmarks_to_numpy(
         self, landmark_list, num_landmarks: int
     ) -> npt.NDArray[np.float32]:
@@ -276,12 +291,12 @@ class MediaPipeLandmarkExtractor(BaseLandmarkExtractor):
                         hand_lm = self._landmarks_to_numpy(
                             hand_result.hand_landmarks[i], 21
                         )
-                        # MediaPipe returns mirrored labels (camera view),
-                        # "left" from MediaPipe = actual right hand
+                        # AUTSL RGB frames are passed without horizontal mirroring.
+                        # Keep MediaPipe's handedness aligned with pose wrists.
                         if hand_label == "left":
-                            right_hand_landmarks = hand_lm
-                        else:
                             left_hand_landmarks = hand_lm
+                        elif hand_label == "right":
+                            right_hand_landmarks = hand_lm
             except Exception as e:
                 logger.debug(f"Hand detection failed for frame: {e}")
 

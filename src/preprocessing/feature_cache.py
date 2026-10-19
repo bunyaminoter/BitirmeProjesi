@@ -52,37 +52,47 @@ class FeatureCache:
         self.store_hand_crops = store_hand_crops
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def _get_cache_path(self, video_id: str) -> Path:
+    def _get_cache_path(self, video_id: str, split: Optional[str] = None) -> Path:
         """Get the cache file path for a given video ID.
 
         Args:
             video_id: Unique video identifier.
+            split: Optional dataset split (e.g. 'train', 'val', 'test').
 
         Returns:
             Path to the cache file.
         """
         ext = ".npz" if self.cache_format == "npz" else ".h5"
+        if split:
+            split_dir = self.cache_dir / split
+            split_dir.mkdir(parents=True, exist_ok=True)
+            return split_dir / f"{video_id}{ext}"
         return self.cache_dir / f"{video_id}{ext}"
 
-    def exists(self, video_id: str) -> bool:
+    def exists(self, video_id: str, split: Optional[str] = None) -> bool:
         """Check if cached features exist for a video.
 
         Args:
             video_id: Unique video identifier.
+            split: Optional dataset split.
 
         Returns:
             True if cached features exist.
         """
-        return self._get_cache_path(video_id).exists()
+        ext = ".npz" if self.cache_format == "npz" else ".h5"
+        if split and (self.cache_dir / split / f"{video_id}{ext}").exists():
+            return True
+        return (self.cache_dir / f"{video_id}{ext}").exists()
 
-    def save(self, video_id: str, features: Dict[str, Any]) -> None:
+    def save(self, video_id: str, features: Dict[str, Any], split: Optional[str] = None) -> None:
         """Save extracted features to disk.
 
         Args:
             video_id: Unique video identifier.
             features: Dictionary of feature arrays to cache.
+            split: Optional dataset split (e.g. 'train', 'val', 'test').
         """
-        cache_path = self._get_cache_path(video_id)
+        cache_path = self._get_cache_path(video_id, split=split)
 
         if self.cache_format == "npz":
             np.savez_compressed(str(cache_path), **features)
@@ -90,17 +100,21 @@ class FeatureCache:
             # TODO: Implement HDF5 storage for very large datasets
             raise NotImplementedError("HDF5 caching not yet implemented")
 
-    def load(self, video_id: str) -> Optional[Dict[str, np.ndarray]]:
+    def load(self, video_id: str, split: Optional[str] = None) -> Optional[Dict[str, np.ndarray]]:
         """Load cached features from disk.
 
         Args:
             video_id: Unique video identifier.
+            split: Optional dataset split.
 
         Returns:
             Dictionary of feature arrays, or None if not cached.
         """
-        cache_path = self._get_cache_path(video_id)
-        if not cache_path.exists():
+        ext = ".npz" if self.cache_format == "npz" else ".h5"
+        cache_path = self.cache_dir / f"{video_id}{ext}"
+        if split and (self.cache_dir / split / f"{video_id}{ext}").exists():
+            cache_path = self.cache_dir / split / f"{video_id}{ext}"
+        elif not cache_path.exists():
             return None
 
         if self.cache_format == "npz":

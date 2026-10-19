@@ -1,53 +1,64 @@
 #!/bin/bash
 # ==============================================================================
-# Colab Eğitim Yardımcı Betiği (Google Colab Training Helper Script)
+# Colab TİD (Türk İşaret Dili / AUTSL) Eğitim Yardımcı Betiği
 #
-# Google Drive üzerinden projeyi çalıştırır.
-# Kullanım: !bash scripts/colab_train.sh
+# Google Drive üzerinden 10 sınıflık TİD modellerini çalıştırır.
+# Kullanım: 
+#   !bash scripts/colab_train.sh configs/experiment/autsl_10_mobilenet.yaml
+#   !bash scripts/colab_train.sh --cv  (5-Fold Cross-Validation)
 # ==============================================================================
 
 set -e  # Hata olursa dur
 
-# ---- Ortam Değişkenleri (Colab'da çalıştırıldığında Drive yolları) ----
+MODE=${1:-"single"}
+CONFIG=${2:-"configs/experiment/autsl_10_mobilenet.yaml"}
+
+if [ "$1" != "--cv" ] && [ -n "$1" ]; then
+    CONFIG=$1
+fi
+
+EXP_NAME=$(basename "${CONFIG}" .yaml)
+
+# ---- Ortam Değişkenleri ----
 DRIVE_PROJECT="/content/drive/MyDrive/BitirmeProjesi"
-DRIVE_CACHE="${DRIVE_PROJECT}/cache/asl_citizen_features"
+DRIVE_CACHE="${DRIVE_PROJECT}/cache/tid_10_features"
+LOCAL_CACHE="/content/BitirmeProjesi/cache/tid_10_features"
 DRIVE_OUTPUTS="${DRIVE_PROJECT}/outputs"
 WORK_DIR="/content/BitirmeProjesi"
 
-# ASL Citizen dataset splits (Colab'da Drive'a yüklenen CSV dosyaları)
-ASL_SPLITS="${DRIVE_PROJECT}/asl_citizen_data/splits"
-
 echo "=========================================================="
-echo "Colab ASL Citizen Eğitim Süreci Başlatılıyor..."
+echo "Colab TİD (Türk İşaret Dili / AUTSL) Eğitim Süreci"
+echo "Model Konfigürasyonu: ${CONFIG}"
 echo "=========================================================="
 
-# 1. Proje kodlarını Drive'dan hızlı çalışma alanına kopyala
-echo "[1/4] Proje kodları kopyalanıyor..."
-rm -rf ${WORK_DIR}
-mkdir -p ${WORK_DIR}
-cp -r ${DRIVE_PROJECT}/src ${WORK_DIR}/
-cp -r ${DRIVE_PROJECT}/scripts ${WORK_DIR}/
-cp -r ${DRIVE_PROJECT}/configs ${WORK_DIR}/
-cp ${DRIVE_PROJECT}/requirements.txt ${WORK_DIR}/ 2>/dev/null || true
-cp ${DRIVE_PROJECT}/pyproject.toml ${WORK_DIR}/ 2>/dev/null || true
+# 1. Yerel hızlı disk önbelleği hazırla
+echo "[1/3] Cache dosyaları yerel diske eşitleniyor..."
+mkdir -p ${LOCAL_CACHE}
+if [ -d "${DRIVE_CACHE}" ] && [ "$(ls -A ${DRIVE_CACHE})" ]; then
+    echo "1.245 Cache dosyası Drive'dan kopyalanıyor..."
+    cp -rn ${DRIVE_CACHE}/* ${LOCAL_CACHE}/ 2>/dev/null || true
+fi
 
-# 2. Bağımlılıkları yükle
-echo "[2/4] Bağımlılıklar yükleniyor..."
-pip install -q mediapipe pyyaml numpy opencv-python
+# 2. Bağımlılıkları kontrol et
+echo "[2/3] Bağımlılıklar doğrulanıyor..."
+pip install -q pyyaml matplotlib rich opencv-python scikit-learn
 
-# 3. Dizinleri hazırla
-echo "[3/4] Çıktı dizinleri hazırlanıyor..."
-mkdir -p ${DRIVE_OUTPUTS}/asl_citizen_baseline/checkpoints
-mkdir -p ${DRIVE_PROJECT}/cache
-
-# 4. Eğitimi başlat
-echo "[4/4] Model Eğitimi Başlatılıyor!"
+# 3. Eğitimi başlat
 cd ${WORK_DIR}
-python scripts/train.py \
-    --config configs/experiment/asl_citizen_baseline.yaml \
-    --cache_dir "${DRIVE_CACHE}"
+if [ "$1" == "--cv" ]; then
+    echo "[3/3] 5-Fold Cross-Validation ve Ensemble Başlatılıyor..."
+    python scripts/train_cv.py \
+        --config "${CONFIG}" \
+        --n_splits 5 \
+        --cache_dir "${LOCAL_CACHE}"
+else
+    echo "[3/3] Standart Model Eğitimi Başlatılıyor..."
+    python scripts/train.py \
+        --config "${CONFIG}" \
+        --cache_dir "${LOCAL_CACHE}"
+fi
 
 echo "=========================================================="
-echo "Eğitim tamamlandı!"
-echo "Checkpoint dosyaları: ${DRIVE_OUTPUTS}"
+echo "✅ İşlem başarıyla tamamlandı!"
+echo "Çıktılar Drive'a kaydedildi: ${DRIVE_OUTPUTS}"
 echo "=========================================================="

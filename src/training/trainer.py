@@ -3,7 +3,8 @@ Main Trainer class for the training loop.
 
 Handles the full training lifecycle: epoch loop, loss computation,
 optimization, validation, checkpointing, and callback dispatch.
-Supports mixed precision, gradient clipping, and resume from checkpoint.
+Supports mixed precision, gradient clipping, gradient accumulation,
+EMA, Mixup, and resume from checkpoint.
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ from tqdm import tqdm
 
 from src.core.config import ExperimentConfig
 from src.training.callbacks.base_callback import BaseCallback
+from src.training.ema import ModelEMA
+from src.training.mixup import mixup_batch, mixup_criterion
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,9 @@ class Trainer:
     Manages the complete training lifecycle with support for:
         - Mixed precision training (torch.amp)
         - Gradient clipping
+        - Gradient accumulation (simulate larger batch sizes)
+        - Exponential Moving Average (EMA) of model weights
+        - Mixup data augmentation
         - Callback system (checkpoint, early stopping, logging)
         - Resume from checkpoint
         - Multi-device support (CPU, CUDA, MPS)
@@ -42,6 +48,7 @@ class Trainer:
         callbacks: List of training callbacks.
         device: Target device for training.
         scaler: GradScaler for mixed precision.
+        ema: Optional EMA model weight tracker.
         current_epoch: Current epoch number.
         global_step: Global step counter.
     """
@@ -55,6 +62,7 @@ class Trainer:
         scheduler: Optional[Any] = None,
         callbacks: Optional[List[BaseCallback]] = None,
         device: Optional[torch.device] = None,
+        ema: Optional[ModelEMA] = None,
     ) -> None:
         """Initialize the Trainer.
 
@@ -66,6 +74,7 @@ class Trainer:
             scheduler: Optional LR scheduler.
             callbacks: Optional list of callbacks.
             device: Target device (auto-detected if None).
+            ema: Optional EMA model weight tracker.
         """
         self.config = config
         self.model = model
@@ -74,11 +83,16 @@ class Trainer:
         self.scheduler = scheduler
         self.callbacks = callbacks or []
         self.device = device or self._detect_device()
+        self.ema = ema
 
         # Mixed precision
         self.scaler = torch.amp.GradScaler(
             enabled=config.training.mixed_precision
         )
+
+        # Training technique params
+        self.accumulation_steps = max(1, config.training.gradient_accumulation_steps)
+        self.mixup_alpha = config.training.mixup_alpha
 
         # State
         self.current_epoch = 0
@@ -87,6 +101,18 @@ class Trainer:
 
         # Move model to device
         self.model.to(self.device)
+
+        # Log active techniques
+        if self.accumulation_steps > 1:
+            effective_batch = config.training.batch_size * self.accumulation_steps
+            logger.info(
+                f"Gradient Accumulation: {self.accumulation_steps} steps "
+                f"(effective batch size: {effective_batch})"
+            )
+        if self.mixup_alpha > 0:
+            logger.info(f"Mixup: alpha={self.mixup_alpha}")
+        if self.ema is not None:
+            logger.info(f"EMA: decay={self.ema.decay}")
 
     def _detect_device(self) -> torch.device:
         """Auto-detect the best available device.
@@ -145,11 +171,20 @@ class Trainer:
             # --- Validation ---
             val_metrics = {}
             if val_loader and (epoch + 1) % self.config.training.val_every_n_epochs == 0:
+                # Use EMA weights for validation if available
+                if self.ema is not None:
+                    self.ema.apply(self.model)
+
                 val_metrics = self._validate_epoch(val_loader)
+
+                # Restore training weights after validation
+                if self.ema is not None:
+                    self.ema.restore(self.model)
 
                 logger.info(
                     f"  Val Loss: {val_metrics['loss']:.4f}, "
                     f"  Val Acc: {val_metrics['accuracy']:.4f}"
+                    + (" (EMA)" if self.ema is not None else "")
                 )
 
                 self._dispatch(
@@ -160,27 +195,34 @@ class Trainer:
                 )
 
                 # Track best metric
-                val_acc = val_metrics.get("accuracy", 0.0)
+                val_acc = val_metrics.get("val_accuracy", val_metrics.get("accuracy", 0.0))
                 if val_acc > self.best_metric:
                     self.best_metric = val_acc
                     logger.info(
-                        f"  New best val accuracy: {self.best_metric:.4f}"
+                        f"  ★ New best val accuracy: {self.best_metric:.4f}"
                     )
 
             # --- LR Scheduler step (epoch-level) ---
             if self.scheduler is not None:
                 if hasattr(self.scheduler, "step"):
-                    # ReduceLROnPlateau needs metric
-                    if isinstance(
-                        self.scheduler,
-                        torch.optim.lr_scheduler.ReduceLROnPlateau,
+                    # Check if scheduler or wrapped scheduler is ReduceLROnPlateau
+                    needs_metric = False
+                    if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                        needs_metric = True
+                    elif hasattr(self.scheduler, "wrapped_scheduler") and isinstance(
+                        self.scheduler.wrapped_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
                     ):
-                        metric = val_metrics.get(
-                            "accuracy", train_metrics.get("loss", 0.0)
-                        )
+                        needs_metric = True
+
+                    if needs_metric:
+                        metric = val_metrics.get("val_accuracy", val_metrics.get("accuracy", train_metrics.get("loss", 0.0)))
                         self.scheduler.step(metric)
                     else:
                         self.scheduler.step()
+
+            # Log current LR
+            current_lr = self.optimizer.param_groups[0]["lr"]
+            logger.info(f"  LR: {current_lr:.6f}")
 
             # --- Check for early stopping ---
             should_stop = self._check_early_stopping()
@@ -195,6 +237,8 @@ class Trainer:
 
     def _train_epoch(self, loader: DataLoader) -> Dict[str, float]:
         """Run one training epoch.
+
+        Supports gradient accumulation and Mixup augmentation.
 
         Args:
             loader: Training DataLoader.
@@ -212,7 +256,23 @@ class Trainer:
         amp_device = "cuda" if self.device.type == "cuda" else "cpu"
         use_amp = self.config.training.mixed_precision and self.device.type == "cuda"
 
-        pbar = tqdm(loader, desc=f"Epoch {self.current_epoch + 1}/{self.config.training.epochs} [Train]", leave=False)
+        # Zero gradients at the start
+        self.optimizer.zero_grad()
+
+        is_overfit = getattr(self.config.training, "overfit_batches", 0) > 0
+        if is_overfit:
+            if not hasattr(self, "_cached_overfit_batches"):
+                logger.info(f"Caching first {self.config.training.overfit_batches} batches for true overfit test.")
+                self._cached_overfit_batches = []
+                for i, b in enumerate(loader):
+                    if i >= self.config.training.overfit_batches:
+                        break
+                    self._cached_overfit_batches.append(b)
+            batch_iterable = self._cached_overfit_batches
+        else:
+            batch_iterable = loader
+
+        pbar = tqdm(batch_iterable, desc=f"Epoch {self.current_epoch + 1}/{self.config.training.epochs} [Train]", leave=False)
         for batch_idx, batch in enumerate(pbar):
             # Move batch tensors to device
             batch = self._move_to_device(batch)
@@ -222,40 +282,68 @@ class Trainer:
 
             self._dispatch("on_batch_start", trainer=self, batch_idx=batch_idx)
 
-            # --- Forward pass with autocast ---
-            self.optimizer.zero_grad()
+            # --- Apply Mixup if enabled ---
+            use_mixup = self.mixup_alpha > 0
+            if use_mixup:
+                batch, targets_a, targets_b, lam = mixup_batch(
+                    batch, alpha=self.mixup_alpha
+                )
+            else:
+                targets_a = labels
+                targets_b = labels
+                lam = 1.0
 
+                # Forward pass with autocast
             with torch.amp.autocast(device_type=amp_device, enabled=use_amp):
                 logits = self.model(batch)  # (B, num_classes)
-                loss = self.criterion(logits, labels)
+                if use_mixup:
+                    loss = mixup_criterion(
+                        self.criterion, logits.float(), targets_a, targets_b, lam
+                    )
+                else:
+                    loss = self.criterion(logits.float(), labels)
+
+                # Scale loss for gradient accumulation
+                if self.accumulation_steps > 1:
+                    loss = loss / self.accumulation_steps
 
             # --- Backward pass with scaler ---
             self.scaler.scale(loss).backward()
 
-            # --- Gradient clipping ---
-            if self.config.training.gradient_clip > 0:
-                self.scaler.unscale_(self.optimizer)
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(),
-                    self.config.training.gradient_clip,
-                )
+            # --- Optimizer step every accumulation_steps ---
+            if (batch_idx + 1) % self.accumulation_steps == 0 or (batch_idx + 1) == len(loader):
+                # Gradient clipping
+                if self.config.training.gradient_clip > 0:
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(),
+                        self.config.training.gradient_clip,
+                    )
 
-            # --- Optimizer step ---
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+                # Optimizer step
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()
+
+                # Update EMA after each optimizer step
+                if self.ema is not None:
+                    self.ema.update(self.model)
+
+                self.global_step += 1
 
             # --- Track metrics ---
-            running_loss += loss.item() * batch_size
+            # Undo the accumulation scaling for display
+            display_loss = loss.item() * (self.accumulation_steps if self.accumulation_steps > 1 else 1)
+            running_loss += display_loss * batch_size
             preds = logits.argmax(dim=-1)
             correct += (preds == labels).sum().item()
             total += batch_size
-            self.global_step += 1
 
             self._dispatch(
                 "on_batch_end",
                 trainer=self,
                 batch_idx=batch_idx,
-                loss=loss.item(),
+                loss=display_loss,
             )
 
             # Periodic logging
@@ -265,18 +353,28 @@ class Trainer:
             ):
                 logger.info(
                     f"  Step {batch_idx + 1}/{len(loader)} — "
-                    f"Loss: {loss.item():.4f}"
+                    f"Loss: {display_loss:.4f}"
                 )
             
             # Update progress bar
-            pbar.set_postfix({"loss": f"{loss.item():.4f}", "acc": f"{(correct/max(total,1)):.4f}"})
+            pbar.set_postfix({"loss": f"{display_loss:.4f}", "acc": f"{(correct/max(total,1)):.4f}"})
 
         epoch_loss = running_loss / max(total, 1)
         epoch_acc = correct / max(total, 1)
 
-        return {"loss": epoch_loss, "accuracy": epoch_acc}
+        return {
+            "loss": epoch_loss,
+            "accuracy": epoch_acc,
+            "train_loss": epoch_loss,
+            "train_accuracy": epoch_acc,
+        }
+
+    def evaluate(self, loader: DataLoader) -> Dict[str, float]:
+        """Evaluate the model on any DataLoader (e.g. Test split)."""
+        return self._validate_epoch(loader)
 
     def _validate_epoch(self, loader: DataLoader) -> Dict[str, float]:
+
         """Run one validation epoch.
 
         Args:
@@ -294,7 +392,13 @@ class Trainer:
         amp_device = "cuda" if self.device.type == "cuda" else "cpu"
         use_amp = self.config.training.mixed_precision and self.device.type == "cuda"
 
-        pbar = tqdm(loader, desc=f"Epoch {self.current_epoch + 1}/{self.config.training.epochs} [Val]", leave=False)
+        is_overfit = getattr(self.config.training, "overfit_batches", 0) > 0
+        if is_overfit and hasattr(self, "_cached_overfit_batches"):
+            batch_iterable = self._cached_overfit_batches
+        else:
+            batch_iterable = loader
+
+        pbar = tqdm(batch_iterable, desc=f"Epoch {self.current_epoch + 1}/{self.config.training.epochs} [Val]", leave=False)
         with torch.no_grad():
             for batch in pbar:
                 batch = self._move_to_device(batch)
@@ -303,7 +407,7 @@ class Trainer:
 
                 with torch.amp.autocast(device_type=amp_device, enabled=use_amp):
                     logits = self.model(batch)
-                    loss = self.criterion(logits, labels)
+                    loss = self.criterion(logits.float(), labels)
 
                 running_loss += loss.item() * batch_size
                 preds = logits.argmax(dim=-1)
@@ -315,7 +419,12 @@ class Trainer:
         epoch_loss = running_loss / max(total, 1)
         epoch_acc = correct / max(total, 1)
 
-        return {"loss": epoch_loss, "accuracy": epoch_acc}
+        return {
+            "loss": epoch_loss,
+            "accuracy": epoch_acc,
+            "val_loss": epoch_loss,
+            "val_accuracy": epoch_acc,
+        }
 
     def _move_to_device(self, batch: Dict[str, Any]) -> Dict[str, Any]:
         """Move batch tensors to the target device.
@@ -365,6 +474,8 @@ class Trainer:
         }
         if self.scheduler is not None:
             checkpoint["scheduler_state_dict"] = self.scheduler.state_dict()
+        if self.ema is not None:
+            checkpoint["ema_state_dict"] = self.ema.state_dict()
 
         torch.save(checkpoint, path)
 
@@ -381,7 +492,7 @@ class Trainer:
         if not path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {path}")
 
-        checkpoint = torch.load(path, map_location=self.device)
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
@@ -391,6 +502,9 @@ class Trainer:
 
         if self.scheduler is not None and "scheduler_state_dict" in checkpoint:
             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+
+        if self.ema is not None and "ema_state_dict" in checkpoint:
+            self.ema.load_state_dict(checkpoint["ema_state_dict"])
 
     def _dispatch(self, event: str, **kwargs: Any) -> None:
         """Dispatch a callback event to all registered callbacks.

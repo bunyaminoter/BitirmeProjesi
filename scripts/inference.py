@@ -5,7 +5,7 @@ Runs the full pipeline on a single video file and outputs the
 predicted sign label.
 
 Usage:
-    python scripts/inference.py --config configs/experiment/asl_citizen_100.yaml --checkpoint checkpoints/best_model.pt --video path/to/video.mp4
+    python scripts/inference.py --config configs/experiment/autsl_10_mobilenet.yaml --checkpoint checkpoints/best_model.pt --video path/to/video.mp4
 """
 
 from __future__ import annotations

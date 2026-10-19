@@ -88,3 +88,48 @@ class BiLSTMTemporal(BaseTemporal):
         combined = torch.cat([forward_h, backward_h], dim=-1)  # (B, 2*hidden_dim)
 
         return self.projection(combined)
+
+
+@TEMPORAL_REGISTRY.register("bigru")
+@TEMPORAL_REGISTRY.register("gru")
+class BiGRUTemporal(BaseTemporal):
+    """Bidirectional GRU temporal sequence model.
+
+    Lightweight recurrent model requested for low-latency temporal modeling.
+    """
+
+    def __init__(self, config: TemporalConfig, input_dim: int) -> None:
+        super().__init__()
+        self._config = config
+        self._output_dim = config.hidden_dim
+
+        self.gru = nn.GRU(
+            input_size=input_dim,
+            hidden_size=config.hidden_dim,
+            num_layers=config.num_layers,
+            batch_first=True,
+            bidirectional=True,
+            dropout=config.dropout if config.num_layers > 1 else 0.0,
+        )
+
+        self.projection = nn.Sequential(
+            nn.Linear(config.hidden_dim * 2, config.hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(config.dropout),
+        )
+
+    @property
+    def output_dim(self) -> int:
+        return self._output_dim
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        output, h_n = self.gru(x)
+        forward_h = h_n[-2]
+        backward_h = h_n[-1]
+        combined = torch.cat([forward_h, backward_h], dim=-1)
+        return self.projection(combined)
+

@@ -4,7 +4,7 @@ Evaluation entry point.
 Loads a trained model checkpoint and evaluates on the test split.
 
 Usage:
-    python scripts/evaluate.py --config configs/experiment/asl_citizen_100.yaml --checkpoint checkpoints/best_model.pt
+    python scripts/evaluate.py --config configs/experiment/autsl_10_mobilenet.yaml --checkpoint checkpoints/best_model.pt
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.core.config import load_config
-from src.data.asl_citizen_datamodule import ASLCitizenDataModule
+from src.data.tid_datamodule import TIDDataModule
 from src.evaluation.evaluator import Evaluator
 from src.models.hybrid_model import HybridASLModel
 from src.utils.device import get_device
@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--split", type=str, default="test", choices=["val", "test"])
-    parser.add_argument("--cache_dir", type=str, default="cache/features/")
+    parser.add_argument("--cache_dir", type=str, default=None)
     parser.add_argument("--output", type=str, default=None,
                         help="Optional path to save evaluation results as JSON.")
     return parser.parse_args()
@@ -54,12 +54,14 @@ def main() -> None:
     log.info(f"Checkpoint: {args.checkpoint}")
 
     # --- 1. Build DataModule ---
-    datamodule = ASLCitizenDataModule(
+    datamodule = TIDDataModule(
         dataset_config=config.dataset,
         training_config=config.training,
-        cache_dir=args.cache_dir,
+        cache_dir=args.cache_dir or config.dataset.cache_dir,
+        hand_image_size=tuple(config.model.hand_encoder.input_size),
+        landmark_dim=config.model.landmark_encoder.input_dim,
     )
-    datamodule.setup(stage="test")
+    datamodule.setup(stage="test" if args.split == "test" else "validate")
 
     if args.split == "test":
         dataloader = datamodule.test_dataloader()
@@ -78,7 +80,7 @@ def main() -> None:
         log.error(f"Checkpoint not found: {checkpoint_path}")
         return
 
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint["model_state_dict"])
     log.info(
         f"Loaded checkpoint from epoch {checkpoint.get('epoch', '?')}, "

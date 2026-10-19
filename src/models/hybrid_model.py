@@ -81,53 +81,61 @@ class HybridASLModel(nn.Module):
         )
 
         # --- Branch 2 & 3: Hand CNN Encoders ---
-        self.hand_encoder_left: nn.Module = ENCODER_REGISTRY.build(
-            "hand_cnn",
-            config=config.hand_encoder,
-        )
-        hand_out_dim = config.hand_encoder.output_dim
-
-        # If shared_weights is True, right encoder points to left
-        if config.hand_encoder.shared_weights:
-            self.hand_encoder_right = self.hand_encoder_left
-            logger.info(
-                f"Hand CNN encoder (shared): backbone={config.hand_encoder.backbone}, "
-                f"output_dim={hand_out_dim}"
-            )
-        else:
-            self.hand_encoder_right: nn.Module = ENCODER_REGISTRY.build(
+        if self.config.use_rgb:
+            self.hand_encoder_left: nn.Module = ENCODER_REGISTRY.build(
                 "hand_cnn",
                 config=config.hand_encoder,
             )
-            logger.info(
-                f"Hand CNN encoder (independent L/R): backbone={config.hand_encoder.backbone}, "
-                f"output_dim={hand_out_dim}"
-            )
+            hand_out_dim = config.hand_encoder.output_dim
 
-        # --- Feature Fusion ---
-        # Input dims: [landmark_out, left_hand_out, right_hand_out]
-        fusion_input_dims: List[int] = [landmark_out_dim, hand_out_dim, hand_out_dim]
-        self.fusion: nn.Module = FUSION_REGISTRY.build(
-            config.fusion.method,
-            config=config.fusion,
-            input_dims=fusion_input_dims,
-        )
-        fusion_out_dim = config.fusion.output_dim
-        logger.info(
-            f"Fusion: method={config.fusion.method}, "
-            f"input_dims={fusion_input_dims}, output_dim={fusion_out_dim}"
-        )
+            # If shared_weights is True, right encoder points to left
+            if config.hand_encoder.shared_weights:
+                self.hand_encoder_right = self.hand_encoder_left
+                logger.info(
+                    f"Hand CNN encoder (shared): backbone={config.hand_encoder.backbone}, "
+                    f"output_dim={hand_out_dim}"
+                )
+            else:
+                self.hand_encoder_right: nn.Module = ENCODER_REGISTRY.build(
+                    "hand_cnn",
+                    config=config.hand_encoder,
+                )
+                logger.info(
+                    f"Hand CNN encoder (independent L/R): backbone={config.hand_encoder.backbone}, "
+                    f"output_dim={hand_out_dim}"
+                )
+
+            # --- Feature Fusion ---
+            # Input dims: [landmark_out, left_hand_out, right_hand_out]
+            fusion_input_dims: List[int] = [landmark_out_dim, hand_out_dim, hand_out_dim]
+            self.fusion: nn.Module = FUSION_REGISTRY.build(
+                config.fusion.method,
+                config=config.fusion,
+                input_dims=fusion_input_dims,
+            )
+            fusion_out_dim = config.fusion.output_dim
+            logger.info(
+                f"Fusion: method={config.fusion.method}, "
+                f"input_dims={fusion_input_dims}, output_dim={fusion_out_dim}"
+            )
+            temporal_input_dim = fusion_out_dim
+        else:
+            self.hand_encoder_left = None
+            self.hand_encoder_right = None
+            self.fusion = None
+            temporal_input_dim = landmark_out_dim
+            logger.info("RGB features disabled (use_rgb=False). Operating in Landmark-Only mode.")
 
         # --- Temporal Model ---
         self.temporal: nn.Module = TEMPORAL_REGISTRY.build(
             config.temporal.method,
             config=config.temporal,
-            input_dim=fusion_out_dim,
+            input_dim=temporal_input_dim,
         )
         temporal_out_dim = config.temporal.hidden_dim
         logger.info(
             f"Temporal: method={config.temporal.method}, "
-            f"input_dim={fusion_out_dim}, output_dim={temporal_out_dim}"
+            f"input_dim={temporal_input_dim}, output_dim={temporal_out_dim}"
         )
 
         # --- Classification Head ---
@@ -166,26 +174,30 @@ class HybridASLModel(nn.Module):
         landmark_features = self.landmark_encoder(landmark_flat)  # (B*T, lm_out)
         landmark_features = landmark_features.reshape(B, T, -1)  # (B, T, lm_out)
 
-        # --- Encode hand crops per frame ---
-        # left_hand_images: (B, T, C, H, W) → (B*T, C, H, W)
-        left_flat = left_hand_images.reshape(B * T, *left_hand_images.shape[2:])
-        left_features = self.hand_encoder_left(left_flat)  # (B*T, hand_out)
-        left_features = left_features.reshape(B, T, -1)  # (B, T, hand_out)
+        if self.config.use_rgb:
+            # --- Encode hand crops per frame ---
+            # left_hand_images: (B, T, C, H, W) → (B*T, C, H, W)
+            left_flat = left_hand_images.reshape(B * T, *left_hand_images.shape[2:])
+            left_features = self.hand_encoder_left(left_flat)  # (B*T, hand_out)
+            left_features = left_features.reshape(B, T, -1)  # (B, T, hand_out)
 
-        # right_hand_images: (B, T, C, H, W) → (B*T, C, H, W)
-        right_flat = right_hand_images.reshape(B * T, *right_hand_images.shape[2:])
-        right_features = self.hand_encoder_right(right_flat)  # (B*T, hand_out)
-        right_features = right_features.reshape(B, T, -1)  # (B, T, hand_out)
+            # right_hand_images: (B, T, C, H, W) → (B*T, C, H, W)
+            right_flat = right_hand_images.reshape(B * T, *right_hand_images.shape[2:])
+            right_features = self.hand_encoder_right(right_flat)  # (B*T, hand_out)
+            right_features = right_features.reshape(B, T, -1)  # (B, T, hand_out)
 
-        # --- Fuse features per frame ---
-        # Each frame: [landmark_feat, left_feat, right_feat] → fused
-        # Process all frames at once by reshaping
-        lm_fuse = landmark_features.reshape(B * T, -1)
-        left_fuse = left_features.reshape(B * T, -1)
-        right_fuse = right_features.reshape(B * T, -1)
+            # --- Fuse features per frame ---
+            # Each frame: [landmark_feat, left_feat, right_feat] → fused
+            # Process all frames at once by reshaping
+            lm_fuse = landmark_features.reshape(B * T, -1)
+            left_fuse = left_features.reshape(B * T, -1)
+            right_fuse = right_features.reshape(B * T, -1)
 
-        fused = self.fusion([lm_fuse, left_fuse, right_fuse])  # (B*T, fused_dim)
-        fused = fused.reshape(B, T, -1)  # (B, T, fused_dim)
+            fused = self.fusion([lm_fuse, left_fuse, right_fuse])  # (B*T, fused_dim)
+            fused = fused.reshape(B, T, -1)  # (B, T, fused_dim)
+        else:
+            # Landmark-only mode bypasses hand encoders and fusion
+            fused = landmark_features
 
         # --- Temporal modeling ---
         # fused: (B, T, fused_dim) → sequence_repr: (B, temporal_out_dim)

@@ -22,8 +22,8 @@ from src.preprocessing.mediapipe_extractor import MediaPipeLandmarkExtractor
 from src.utils.device import get_device
 
 # Varsayılan yapılandırma ve model yolları
-CONFIG_PATH = project_root / "configs" / "experiment" / "asl_citizen_100.yaml"
-CHECKPOINT_PATH = project_root / "outputs" / "asl_citizen_100" / "checkpoints" / "best_model.pt"
+CONFIG_PATH = project_root / "configs" / "experiment" / "autsl_10_mobilenet.yaml"
+CHECKPOINT_PATH = project_root / "outputs" / "autsl_10_mobilenet" / "checkpoints" / "best_model.pt"
 
 # Global değişkenler (modelin RAM'de sürekli açık kalması için)
 model = None

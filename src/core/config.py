@@ -39,6 +39,8 @@ class HandEncoderConfig:
     shared_weights: bool = True
     dropout: float = 0.3
     use_cbam: bool = False
+    freeze_backbone: bool = False
+    custom_weights_path: Optional[str] = None
 
 
 @dataclass
@@ -111,6 +113,7 @@ class ModelConfig:
     """Top-level model architecture configuration.
 
     Attributes:
+        use_rgb: Whether to use RGB hand crops (Hybrid) or landmark only.
         hand_encoder: Hand CNN encoder configuration.
         landmark_encoder: Landmark encoder configuration.
         fusion: Feature fusion configuration.
@@ -119,6 +122,7 @@ class ModelConfig:
         classifier_dropout: Dropout before the final classification head.
     """
 
+    use_rgb: bool = True
     hand_encoder: HandEncoderConfig = field(default_factory=HandEncoderConfig)
     landmark_encoder: LandmarkEncoderConfig = field(
         default_factory=LandmarkEncoderConfig
@@ -139,10 +143,12 @@ class DatasetConfig:
     """Configuration for dataset loading.
 
     Attributes:
-        name: Registered dataset name (e.g., 'asl_citizen').
+        name: Registered dataset name (e.g., 'autsl').
         annotation_file: JSON or CSV file containing video annotations. file.
         video_dir: Directory containing video files.
-        num_classes: Number of classes to use (e.g., 100, 300, 1000).
+        num_classes: Number of model output classes.
+        class_ids: Optional source class IDs.  AUTSL subsets use these original
+            0-based AUTSL IDs and are remapped to contiguous model labels.
         num_frames: Number of frames to sample per video.
         class_list_file: Path to class label list file.
         train_split: Split name for training data.
@@ -150,14 +156,17 @@ class DatasetConfig:
         test_split: Split name for test data.
     """
 
-    name: str = "asl_citizen"
-    annotation_file: str = "asl_citizen_100.json"
+    name: str = "autsl"
+    annotation_file: str = "data/autsl"
     data_dir: str = "videos"
     video_dir: Optional[str] = "videos"
-    num_classes: Optional[int] = 10
+    num_classes: Optional[int] = 226
+    class_ids: Optional[List[int]] = None
     num_frames: Optional[int] = 16
     cache_dir: str = "cache/features"
-    class_list_file: str = "asl_citizen_class_list.txt"
+    cache_derivation: Optional[str] = None
+    max_repair_gap: Optional[int] = None
+    class_list_file: str = "cache/autsl_class_list_226.txt"
     train_split: str = "train"
     val_split: str = "val"
     test_split: str = "test"
@@ -191,6 +200,7 @@ class AugmentationConfig:
     hand_random_blur: bool = True
     hand_random_translation: int = 10
     pose_jitter_std: float = 0.01
+    random_erasing_prob: float = 0.0
 
 
 # ============================================================================
@@ -237,6 +247,16 @@ class TrainingConfig:
     resume_from: Optional[str] = None
     log_every_n_steps: int = 10
     val_every_n_epochs: int = 1
+
+    # --- Advanced training techniques ---
+    gradient_accumulation_steps: int = 1
+    gradient_checkpointing: bool = False
+    use_ema: bool = False
+    ema_decay: float = 0.999
+    warmup_epochs: int = 0
+    mixup_alpha: float = 0.0
+    label_smoothing: float = 0.0
+    overfit_batches: int = 0
 
 
 # ============================================================================
@@ -317,6 +337,7 @@ def _dict_to_config(data: Dict[str, Any]) -> ExperimentConfig:
     temporal_cfg = TemporalConfig(**model_data.get("temporal", {}))
 
     model_cfg = ModelConfig(
+        use_rgb=model_data.get("use_rgb", True),
         hand_encoder=hand_enc,
         landmark_encoder=landmark_enc,
         fusion=fusion_cfg,

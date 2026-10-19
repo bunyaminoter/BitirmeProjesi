@@ -75,4 +75,28 @@ class LandmarkEncoder(BaseEncoder):
         Returns:
             (B, output_dim) feature tensor.
         """
-        return self.mlp(x)
+        # --- SPATIAL NORMALIZATION ---
+        # x is (B, D) where D = num_landmarks * 3. 
+        # We temporarily reshape it to (B, V, 3) to normalize over the joints.
+        B, D = x.shape
+        V = D // 3
+        
+        # Reshape to (B, V, 3)
+        coords = x.view(B, V, 3)
+        
+        # 1. Translation invariance: center at origin using only valid (non-zero) detected joints
+        is_valid = (coords.abs().sum(dim=-1, keepdim=True) > 1e-4)  # (B, V, 1)
+        valid_count = is_valid.sum(dim=1, keepdim=True).clamp(min=1.0)  # (B, 1, 1)
+        center = (coords * is_valid).sum(dim=1, keepdim=True) / valid_count  # (B, 1, 3)
+        
+        coords_centered = torch.where(is_valid, coords - center, torch.zeros_like(coords))
+        
+        # 2. Scale invariance: normalize by spread of valid joints
+        valid_norms = coords_centered.norm(dim=-1, keepdim=True) * is_valid
+        scale = (valid_norms.sum(dim=1, keepdim=True) / valid_count).clamp(min=1e-4)  # (B, 1, 1)
+        coords_normed = torch.where(is_valid, coords_centered / scale, torch.zeros_like(coords))
+        
+        # Flatten back to (B, D)
+        x_norm = coords_normed.view(B, D)
+        
+        return self.mlp(x_norm)

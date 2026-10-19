@@ -60,4 +60,29 @@ Bu dokümandaki araştırma sonucunda projemizin **"2025 SOTA (State of the Art)
 *   **Dosya:** `src/data/augmentations.py`
 *   **İşlev:** MediaPipe'ın hata payını simüle etmek için eğitim sırasında eklem (landmark) noktalarına rastgele küçük kaymalar (Gaussian Noise) uygulanacak. Bu, ST-GCN modelinin aşırı öğrenmesini (overfitting) engelleyecek.
 
-*Not: Bu eklentiler Colab T4 (Ücretsiz) veya Pro versiyonunda herhangi bir VRAM darboğazı yaratmayacak hafiflikte ama mimari açıdan çok güçlü yeniliklerdir.*
+---
+
+## 🎯 Danışman Revizyonu ve Yeni Geliştirme Stratejisi (Ekim 2026)
+
+Proje danışmanıyla yapılan görüşmeler sonucunda, 100 sınıflık geniş veri setinde her eğitim için 30-40 epoch beklemenin süreci çok yavaşlattığı tespit edilmiştir. Bu nedenle eğitim stratejisi radikal bir şekilde **10 sınıflık hızlı iterasyon** (hızlı deneme-yanılma) döngüsüne çevrilmiştir. En iyi doğruluk oranına ve mimariye ulaşıldıktan sonra 100 sınıfa çıkılacaktır.
+
+### Aşama 1: Preprocessing ve Veri Optimizasyonları
+1. **Frame Argümantasyonu (Kare Sayısı Testleri):**
+   *   Modelin performansına olan etkisini görmek için videoların `num_frames` parametresi optimize edilecektir (Örn: Sabit 16 kare mi, 32 kare mi, yoksa dinamik frame seçimi mi daha başarılı?).
+2. **Train/Test Klasör ve Veri Ayrımı:**
+   *   Preprocessing aşamasında Train (Eğitim) ve Test/Validation (Doğrulama) verileri yapısal olarak birbirinden kesin çizgilerle ayrılacaktır.
+
+### Aşama 2: 10 Sınıflık Model Mimari Deneyleri
+Hocanın talepleri doğrultusunda, güncel SOTA (State of the Art) yaklaşımlarla aşağıdaki mimari modeller **10 sınıflık veri setinde** yarışmaya sokulacaktır:
+
+1. **CNN Aileleri (RGB - Uzaysal Analiz):**
+   *   *MobileNet (v2/v3):* Hız odaklı mevcut altyapımız.
+   *   *ConvNeXt:* (Hocanın "Convex" olarak belirttiği mimari). ResNet gibi eski nesil CNN'leri modernize ederek Transformer'ların başarısına ulaşan, saf ama çok güçlü bir Convolutional Network mimarisi.
+2. **Transformer Aileleri (Dikkat Mekanizmaları):**
+   *   *ViT (Vision Transformer):* (Hocanın "wrt" olarak ifade ettiği muhtemel mimari). Görüntüyü patch'lere bölerek her bir karenin birbiriyle ilişkisini analiz eden mimari.
+   *   *Swin Transformer:* (Hocanın "CuadNet/QuadNet" olarak ifade ettiği mimari). ViT'nin çok ağır olmasını önlemek için hiyerarşik "pencereli" (windowed) dikkat mekanizması kullanan modern yaklaşım.
+3. **Zaman Serisi (Temporal) Modelleri:**
+   *   *GRU / LSTM:* Geçmişten gelen geleneksel ancak hafif Recurrent (RNN) modelleri.
+
+### Aşama 3: 100 Sınıfa Genişleme
+10 sınıflık veri setinde (örneğin MobileNet vs ConvNeXt vs Swin Transformer) testleri yapılıp "İşte bu mimari hiç overfitting yapmadan hızlıca öğreniyor ve genelleştiriyor!" denen model bulunduktan sonra, aynı kod mimarisi 100 sınıflık (ve nihayetinde 500 sınıflık) asıl eğitim setine entegre edilecektir.

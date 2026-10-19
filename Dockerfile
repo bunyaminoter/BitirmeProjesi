@@ -23,4 +23,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 7860
 
 # Sunucuyu başlat
-CMD ["python", "scripts/server.py", "--config", "configs/experiment/asl_citizen_baseline.yaml", "--checkpoint", "outputs/asl_citizen_baseline/checkpoints/best_model.pt", "--port", "7860"]
+CMD ["python", "scripts/server.py", "--config", "configs/experiment/autsl_10_mobilenet.yaml", "--checkpoint", "outputs/autsl_10_mobilenet/checkpoints/best_model.pt", "--port", "7860"]

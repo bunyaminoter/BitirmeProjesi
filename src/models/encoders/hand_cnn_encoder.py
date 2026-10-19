@@ -36,7 +36,22 @@ _BACKBONE_REGISTRY: Dict[str, tuple] = {
     "efficientnet_b2": ("efficientnet_b2", "IMAGENET1K_V1", 1408),
     "convnext_tiny": ("convnext_tiny", "IMAGENET1K_V1", 768),
     "convnext_small": ("convnext_small", "IMAGENET1K_V1", 768),
+    "swin_t": ("swin_t", "IMAGENET1K_V1", 768),
+    "vit_b_16": ("vit_b_16", "IMAGENET1K_V1", 768),
 }
+
+
+class _SwinBackbone(nn.Module):
+    def __init__(self, m: nn.Module) -> None:
+        super().__init__()
+        self.features = m.features
+        self.norm = m.norm
+        self.permute = m.permute
+        self.avgpool = m.avgpool
+        self.flatten = m.flatten
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.flatten(self.avgpool(self.permute(self.norm(self.features(x)))))
 
 
 def _build_backbone(
@@ -115,6 +130,11 @@ def _build_backbone(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
         )
+    elif name.startswith("swin"):
+        features = _SwinBackbone(model)
+    elif name.startswith("vit"):
+        model.heads = nn.Identity()
+        features = model
     else:
         raise ValueError(f"No feature extraction logic for backbone '{name}'")
         
@@ -156,6 +176,7 @@ class HandCNNEncoder(BaseEncoder):
         config: Hand encoder configuration.
         backbone: The CNN backbone (without classification head).
         projector: Linear projection to output_dim.
+        _gradient_checkpointing: Whether gradient checkpointing is enabled.
     """
 
     def __init__(self, config: HandEncoderConfig) -> None:
@@ -168,6 +189,7 @@ class HandCNNEncoder(BaseEncoder):
         super().__init__()
         self._config = config
         self._output_dim = config.output_dim
+        self._gradient_checkpointing = False
 
         # Build real torchvision backbone
         self.backbone, backbone_out_dim = _build_backbone(
@@ -181,10 +203,51 @@ class HandCNNEncoder(BaseEncoder):
             nn.ReLU(inplace=True),
         )
 
+        # Load custom pretrained weights if provided
+        custom_weights = getattr(config, "custom_weights_path", None)
+        if custom_weights:
+            import os
+            if os.path.exists(custom_weights):
+                ckpt = torch.load(custom_weights, map_location="cpu")
+                state_dict = ckpt.get("state_dict", ckpt.get("model", ckpt))
+                self.backbone.load_state_dict(state_dict, strict=False)
+                logger.info(f"Loaded custom pretrained weights from: {custom_weights}")
+            else:
+                logger.warning(f"custom_weights_path specified but file not found: {custom_weights}")
+
+        # Freeze backbone if configured (critical for small datasets)
+        self.freeze_backbone = getattr(config, "freeze_backbone", False)
+        if self.freeze_backbone:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+            self.backbone.eval()
+            logger.info(
+                f"Backbone FROZEN: {config.backbone} — only projector will train (eval mode kept)"
+            )
+
+    def train(self, mode: bool = True):
+        """Override train to keep frozen backbone in eval mode."""
+        super().train(mode)
+        if getattr(self, "freeze_backbone", False):
+            self.backbone.eval()
+        return self
+
     @property
     def output_dim(self) -> int:
         """Return the output feature dimension."""
         return self._output_dim
+
+    def enable_gradient_checkpointing(self) -> None:
+        """Enable gradient checkpointing for memory-efficient training.
+
+        Trades compute time (~20-30% slower) for significant VRAM savings
+        (~30-40% less memory) by not storing intermediate activations.
+        """
+        self._gradient_checkpointing = True
+        logger.info(
+            f"Gradient checkpointing enabled for HandCNNEncoder "
+            f"(backbone={self._config.backbone})"
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Extract features from hand crop images.
@@ -195,5 +258,12 @@ class HandCNNEncoder(BaseEncoder):
         Returns:
             (B, output_dim) feature tensor.
         """
-        features = self.backbone(x)
+        if self._gradient_checkpointing and self.training:
+            # Use gradient checkpointing for the heavy backbone
+            features = torch.utils.checkpoint.checkpoint(
+                self.backbone, x, use_reentrant=False
+            )
+        else:
+            features = self.backbone(x)
         return self.projector(features)
+

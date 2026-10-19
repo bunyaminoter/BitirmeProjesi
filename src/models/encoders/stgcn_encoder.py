@@ -148,6 +148,17 @@ class LandmarkSTGCNEncoder(BaseEncoder):
             x = x.view(B_T, V, C)
             
         # x is now (B*T, V, C)
+        
+        # --- SPATIAL NORMALIZATION (CRITICAL FOR LANDMARK MODELS) ---
+        # 1. Translation invariance: center the skeleton at origin
+        center = x.mean(dim=1, keepdim=True)  # (B*T, 1, C)
+        x = x - center
+        
+        # 2. Scale invariance: normalize by the spread of the skeleton
+        #    This ensures people close/far from camera produce similar magnitudes
+        scale = x.norm(dim=-1, keepdim=True).mean(dim=1, keepdim=True).clamp(min=1e-6)  # (B*T, 1, 1)
+        x = x / scale
+        
         # We need (B*T, C, V) for 1D convolution over nodes
         x = x.permute(0, 2, 1)
         

@@ -76,5 +76,8 @@ class CheckpointCallback(BaseCallback):
             trainer.best_metric = current
             trainer.save_checkpoint(self.save_dir / "best_model.pt")
 
+        # Always save latest model so training can resume if Colab cuts off
+        trainer.save_checkpoint(self.save_dir / "latest_model.pt")
+
         if not self.save_best_only and (epoch + 1) % self.save_every_n_epochs == 0:
             trainer.save_checkpoint(self.save_dir / f"checkpoint_epoch_{epoch + 1}.pt")
