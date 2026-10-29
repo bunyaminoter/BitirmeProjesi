@@ -1,0 +1,286 @@
+import json
+
+notebook = {
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "# 🔬 AUTSL 10 Sınıf: Pose-Only (Sadece İskelet) Teşhis Deneyi\n",
+                "Bu notebook, **Seed 7** ve merkez onarımlı önbellek (`cache/autsl_10_features_centerrepair_strict`) üzerinde **RGB el kırpımlarını kapatıp**, modeli **sadece 225 iskelet noktasıyla (MediaPipe koordinatları)** eğitir.\n",
+                "\n",
+                "> **Bu Deneyin Temel Amacı Nedir?**\n",
+                "> * **İşaretçi 11'in (Signer 11)** kürk yelek ve koyu kıyafet içeren 4 hatalı videosunun **RGB fotoğraflarından mı** yoksa **iskelet noktalarından mı** kaynaklandığını bilimsel olarak teşhis etmektir.\n",
+                "> * Eğer model el görüntüleri olmadan (sadece iskeletle) İşaretçi 11'i doğru bilirse: Hatanın görüntüdeki kürk dokusundan kaynaklandığı kanıtlanır.\n",
+                "> * Eğitim süresi: CNN omurgası devre dışı olduğu için T4 GPU ile sadece **~4 dakika** sürer."
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "### 1. Google Drive Bağlantısı ve Gerekli Kütüphaneler"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "from google.colab import drive\n",
+                "drive.mount('/content/drive')\n",
+                "\n",
+                "# Gerekli kütüphaneleri yükle\n",
+                "!pip install -q pyyaml rich opencv-python matplotlib scikit-learn tqdm mediapipe\n",
+                "\n",
+                "import os\n",
+                "os.environ[\"PYTHONDONTWRITEBYTECODE\"] = \"1\"\n",
+                "print(\"✅ Google Drive bağlandı, bağımlılıklar yüklendi.\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "### 2. Proje Kodlarının ve Config Dosyalarının Yüklenmesi\n",
+                "*Drive'a attığınız `colab_kod_guncelleme.zip` dosyasını otomatik bulup Colab yerel SSD'sine açar.*"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "import glob, os, shutil\n",
+                "\n",
+                "local_project = \"/content/BitirmeProjesi\"\n",
+                "os.makedirs(local_project, exist_ok=True)\n",
+                "\n",
+                "# 1. Drive'daki colab_kod_guncelleme.zip dosyasını nerede olursa olsun otomatik bul\n",
+                "found_zip = glob.glob(\"/content/drive/MyDrive/**/colab_kod_guncelleme.zip\", recursive=True)\n",
+                "\n",
+                "if found_zip:\n",
+                "    zip_path = found_zip[0]\n",
+                "    print(f\"📦 Kod paketi bulundu: {zip_path}\")\n",
+                "    !unzip -q -o \"{zip_path}\" -d {local_project}\n",
+                "    print(\"✅ Kodlar ve yeni configler başarıyla açıldı!\")\n",
+                "else:\n",
+                "    print(\"⚠️ colab_kod_guncelleme.zip bulunamadı. Drive'daki klasörlerden kopyalanıyor...\")\n",
+                "    drive_project = \"/content/drive/MyDrive/BitirmeProjesi\"\n",
+                "    for folder in [\"src\", \"scripts\", \"configs\"]:\n",
+                "        src_f = os.path.join(drive_project, folder)\n",
+                "        dst_f = os.path.join(local_project, folder)\n",
+                "        if os.path.exists(src_f):\n",
+                "            if os.path.exists(dst_f):\n",
+                "                shutil.rmtree(dst_f)\n",
+                "            shutil.copytree(src_f, dst_f)\n",
+                "            print(f\"✅ {folder} kopyalandı.\")\n",
+                "\n",
+                "# Checkpoint ve logların kalıcı olması için outputs klasörünü Drive'a bağla\n",
+                "drive_outputs = \"/content/drive/MyDrive/BitirmeProjesi/outputs\"\n",
+                "os.makedirs(drive_outputs, exist_ok=True)\n",
+                "if not os.path.exists(f\"{local_project}/outputs\"):\n",
+                "    os.symlink(drive_outputs, f\"{local_project}/outputs\")\n",
+                "\n",
+                "print(\"✅ Çalışma ortamı hazır!\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "### 3. Önbellek Paketini Açma (`autsl_10_caches.zip`)\n",
+                "*Drive'daki önbellek paketini Colab'ın ultra hızlı yerel SSD'sine açar.*"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "import glob, os\n",
+                "\n",
+                "local_cache_root = \"/content/BitirmeProjesi/cache\"\n",
+                "os.makedirs(local_cache_root, exist_ok=True)\n",
+                "\n",
+                "# Drive'daki autsl_10_caches.zip dosyasını otomatik bul\n",
+                "found_cache = glob.glob(\"/content/drive/MyDrive/**/autsl_10_caches.zip\", recursive=True)\n",
+                "\n",
+                "if found_cache:\n",
+                "    cache_zip = found_cache[0]\n",
+                "    print(f\"📦 Önbellek paketi bulundu: {cache_zip}\")\n",
+                "    # Zaten açılmış mı kontrol et\n",
+                "    strict_val_count = len(glob.glob(\"/content/BitirmeProjesi/cache/autsl_10_features_centerrepair_strict/val/*.npz\"))\n",
+                "    if strict_val_count == 199:\n",
+                "        print(f\"⚡ Önbellek zaten yerel SSD'de mevcut (199 val dosyası tam)! Tekrar açmaya gerek yok.\")\n",
+                "    else:\n",
+                "        print(\"🚀 Önbellek yerel SSD'ye açılıyor (~10 saniye)...\\n\")\n",
+                "        !unzip -q -o \"{cache_zip}\" -d {local_cache_root}\n",
+                "        print(\"✅ Önbellek başarıyla açıldı!\")\n",
+                "else:\n",
+                "    print(\"❌ HATA: autsl_10_caches.zip Drive'da bulunamadı! Lütfen Drive'a yüklediğinizden emin olun.\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "### 4. 🚀 Pose-Only Modelini Eğitme (`autsl_10_poseonly_seed7`)\n",
+                "- Model: Yalnızca 225 Landmark Noktası (El CNN devre dışı)\n",
+                "- 20 Epoch, Seed 7, Cosine Annealing, AdamW\n",
+                "- T4 GPU ile yaklaşık **3-4 dakika** sürer."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "%cd /content/BitirmeProjesi\n",
+                "import os\n",
+                "\n",
+                "# Metadata dizinini belirle\n",
+                "meta_dir = \"/content/BitirmeProjesi/data/autsl\"\n",
+                "if not os.path.exists(os.path.join(meta_dir, \"val_labels.csv\")):\n",
+                "    meta_dir = \"/content/drive/MyDrive/BitirmeProjesi/outputs/colab_training_metadata\"\n",
+                "os.environ[\"AUTSL_DATA_DIR\"] = meta_dir\n",
+                "\n",
+                "print(\"🚀 Pose-Only Model Eğitimi Başlatılıyor...\\n\")\n",
+                "!python scripts/train.py \\\n",
+                "    --config configs/experiment/autsl_10_poseonly_seed7.yaml \\\n",
+                "    --cache_dir /content/BitirmeProjesi/cache/autsl_10_features_centerrepair_strict\n",
+                "\n",
+                "print(\"\\n✅ Eğitim başarıyla tamamlandı!\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "### 5. 📊 Resmi Val Seti Değerlendirmesi ve Video Tahminleri\n",
+                "*199 val videosu üzerinde değerlendirme yapar ve video bazlı tahminleri kaydeder (~20 saniye).* "
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "%cd /content/BitirmeProjesi\n",
+                "\n",
+                "!python scripts/evaluate.py \\\n",
+                "    --config configs/experiment/autsl_10_poseonly_seed7.yaml \\\n",
+                "    --cache_dir /content/BitirmeProjesi/cache/autsl_10_features_centerrepair_strict \\\n",
+                "    --checkpoint /content/drive/MyDrive/BitirmeProjesi/outputs/autsl_10_poseonly_seed7/checkpoints/best_model.pt \\\n",
+                "    --split val \\\n",
+                "    --output outputs/poseonly_seed7_val.json \\\n",
+                "    --predictions_output outputs/poseonly_seed7_predictions.json\n",
+                "\n",
+                "print(\"\\n✅ Değerlendirme ve tahmin kayıtları tamamlandı!\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "### 6. 🔍 Teşhis Analizi: Hibrit vs Pose-Only (İşaretçi 11 Nerede?)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "%cd /content/BitirmeProjesi\n",
+                "\n",
+                "# İkili eşleştirme analizi\n",
+                "!python scripts/analyze_val_pairs.py \\\n",
+                "    --base outputs/centerrepair_seed7_predictions.json \\\n",
+                "    --candidate outputs/poseonly_seed7_predictions.json \\\n",
+                "    --official_labels \"$AUTSL_DATA_DIR/val_labels.csv\" \\\n",
+                "    --output outputs/hybrid_vs_poseonly_seed7_pairs.json\n",
+                "\n",
+                "import os, json\n",
+                "import pandas as pd\n",
+                "\n",
+                "p_path = \"outputs/poseonly_seed7_val.json\"\n",
+                "c_path = \"outputs/centerrepair_seed7_val.json\"\n",
+                "\n",
+                "if os.path.exists(p_path) and os.path.exists(c_path):\n",
+                "    p_res = json.load(open(p_path))\n",
+                "    c_res = json.load(open(c_path))\n",
+                "    \n",
+                "    df = pd.DataFrame([\n",
+                "        {\"Model Mimarisi\": \"1. Hibrit Model (RGB El Kırpımı + İskelet)\", \"Val Doğruluk\": f\"%{c_res['accuracy']*100:.2f}\", \"Macro F1\": f\"{c_res['f1_macro']:.4f}\", \"Top-5\": f\"%{c_res.get('top5_accuracy', 0)*100:.2f}\"},\n",
+                "        {\"Model Mimarisi\": \"2. Pose-Only (Sadece İskelet Noktaları)\", \"Val Doğruluk\": f\"%{p_res['accuracy']*100:.2f}\", \"Macro F1\": f\"{p_res['f1_macro']:.4f}\", \"Top-5\": f\"%{p_res.get('top5_accuracy', 0)*100:.2f}\"}\n",
+                "    ])\n",
+                "    display(df)\n",
+                "else:\n",
+                "    print(\"Sonuç dosyaları bekleniyor...\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "### 7. 📦 Çıktıların Otomatik Paketlenmesi (ChatGPT İçin)\n",
+                "*ChatGPT'ye göndereceğiniz tüm dosyaları tek bir zip haline getirir.*"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "import os, zipfile\n",
+                "\n",
+                "zip_out = \"/content/drive/MyDrive/BitirmeProjesi/chatgptye_gonderilecekler_poseonly.zip\"\n",
+                "\n",
+                "files_to_pack = {\n",
+                "    \"poseonly_seed7_val.json\": \"/content/BitirmeProjesi/outputs/poseonly_seed7_val.json\",\n",
+                "    \"poseonly_seed7_predictions.json\": \"/content/BitirmeProjesi/outputs/poseonly_seed7_predictions.json\",\n",
+                "    \"hybrid_vs_poseonly_seed7_pairs.json\": \"/content/BitirmeProjesi/outputs/hybrid_vs_poseonly_seed7_pairs.json\",\n",
+                "    \"poseonly_seed7_history.csv\": \"/content/BitirmeProjesi/outputs/autsl_10_poseonly_seed7/checkpoints/history.csv\",\n",
+                "    \"poseonly_seed7_curves.png\": \"/content/BitirmeProjesi/outputs/autsl_10_poseonly_seed7/checkpoints/training_curves.png\",\n",
+                "}\n",
+                "\n",
+                "with zipfile.ZipFile(zip_out, \"w\", zipfile.ZIP_DEFLATED) as zf:\n",
+                "    for arcname, src_path in files_to_pack.items():\n",
+                "        if os.path.exists(src_path):\n",
+                "            zf.write(src_path, arcname=arcname)\n",
+                "            print(f\"✅ Pakete eklendi: {arcname}\")\n",
+                "        else:\n",
+                "            print(f\"⚠️ Bulunamadı: {src_path}\")\n",
+                "\n",
+                "print(f\"\\n🎉 TEBRİKLER! Tek parça paket Drive'da hazır:\\n{zip_out}\")"
+            ]
+        }
+    ],
+    "metadata": {
+        "accelerator": "GPU",
+        "colab": {
+            "provenance": []
+        },
+        "kernelspec": {
+            "display_name": "Python 3",
+            "name": "python3"
+        },
+        "language_info": {
+            "name": "python"
+        }
+    },
+    "nbformat": 4,
+    "nbformat_minor": 0
+}
+
+with open("colab_poseonly_deneyi.ipynb", "w", encoding="utf-8") as f:
+    json.dump(notebook, f, indent=1, ensure_ascii=False)
+
+print("colab_poseonly_deneyi.ipynb successfully created!")

@@ -63,3 +63,21 @@ class TestMetricCalculator:
         assert "accuracy" in d
         assert "f1_macro" in d
         assert "top5_accuracy" in d
+
+    def test_macro_and_weighted_f1_average_per_class_scores(self):
+        calc = MetricCalculator(num_classes=2)
+        calc.update(
+            predictions=np.array([0, 0, 0, 1]),
+            labels=np.array([0, 0, 1, 1]),
+        )
+
+        result = calc.compute()
+        # Class 0: precision 2/3, recall 1, F1 4/5.
+        # Class 1: precision 1, recall 1/2, F1 2/3.
+        expected = (4 / 5 + 2 / 3) / 2
+        assert result.f1_macro == pytest.approx(expected)
+        assert result.f1_weighted == pytest.approx(expected)
+        assert result.f1_macro != pytest.approx(
+            2 * result.precision_macro * result.recall_macro
+            / (result.precision_macro + result.recall_macro)
+        )

@@ -27,6 +27,9 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=None,
                         help="AUTSL deney yapılandırması; 10 sınıf alt kümesini de denetler.")
     parser.add_argument("--cache_dir", type=Path, default=None)
+    parser.add_argument("--cache_splits", nargs="+", choices=["train", "val", "test"],
+                        default=["train", "val", "test"],
+                        help="Splits whose cache should be checked; metadata is always checked for all splits.")
     parser.add_argument("--require_cache", action="store_true")
     parser.add_argument("--inspect_features", action="store_true",
                         help="Read cached NPZ files and summarize landmark detection rates")
@@ -47,6 +50,19 @@ def main() -> None:
     ids: dict[str, set[str]] = {}
     signers: dict[str, set[str]] = {}
     result: dict = {"dataset_root": "", "splits": {}, "errors": []}
+    if args.cache_dir:
+        manifest_path = args.cache_dir / "manifest.json"
+        if not manifest_path.is_file():
+            result["errors"].append(f"cache manifest missing: {manifest_path}")
+        else:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            result["cache_manifest"] = manifest
+            for field, expected_value in (
+                ("dataset", "autsl"), ("num_classes", config.num_classes),
+                ("num_frames", config.num_frames), ("class_ids", config.class_ids)
+            ):
+                if manifest.get(field) != expected_value:
+                    result["errors"].append(f"cache manifest {field} mismatch")
     for split, expected in EXPECTED.items():
         dataset = TIDDataset(config, split)
         ids[split] = {sample.video_id for sample in dataset.samples}
@@ -61,7 +77,7 @@ def main() -> None:
         wrist_match = Counter()
         wrist_frames = Counter()
         feature_errors = []
-        if args.cache_dir:
+        if args.cache_dir and split in args.cache_splits:
             cache_count = 0
             for sample in dataset.samples:
                 path = args.cache_dir / split / f"{sample.video_id}.npz"
@@ -113,7 +129,7 @@ def main() -> None:
         }
         if (full_dataset and (len(dataset) != expected or len(labels) != 226)) or missing_videos:
             result["errors"].append(f"{split}: incomplete labels, classes, or RGB files")
-        if args.require_cache and missing_cache:
+        if args.require_cache and split in args.cache_splits and missing_cache:
             result["errors"].append(f"{split}: {len(missing_cache)} feature caches missing")
         if feature_errors:
             result["errors"].append(f"{split}: {len(feature_errors)} invalid feature caches")

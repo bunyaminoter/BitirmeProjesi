@@ -16,6 +16,7 @@ dataset:
   num_frames: 16
   cache_dir: cache/autsl_10_features_wristcrop
   cache_derivation: pose_wrist_fallback_crop
+  cache_derivation_version: 1
   class_list_file: cache/autsl_class_list_10.txt
   train_split: train
   val_split: val

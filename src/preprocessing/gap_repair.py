@@ -38,7 +38,10 @@ def repair_hand_gaps(
         wrist = hand[frame, 0, :2]
         own = np.linalg.norm(wrist - pose[frame, wrist_index, :2])
         other = np.linalg.norm(wrist - pose[frame, other_wrist_index, :2])
-        return bool(np.isfinite(hand[frame]).all() and own < other and own < max_wrist_distance)
+        xy = hand[frame, :, :2]
+        return bool(np.isfinite(hand[frame]).all() and np.isfinite(pose[frame]).all()
+                    and ((xy >= 0) & (xy <= 1)).all()
+                    and own < other and own < max_wrist_distance)
 
     start = 0
     while start < count:
@@ -51,9 +54,18 @@ def repair_hand_gaps(
         if (start > 0 and end < count and end - start <= max_gap
                 and pose_observed[start:end].all()
                 and reliable(start - 1) and reliable(end)):
+            candidates = []
             for frame in range(start, end):
                 alpha = (frame - start + 1) / (end - start + 1)
-                repaired[frame] = ((1 - alpha) * hand[start - 1] + alpha * hand[end]).astype(hand.dtype)
-                imputed[frame] = True
+                candidate = ((1 - alpha) * hand[start - 1] + alpha * hand[end]).astype(hand.dtype)
+                wrist = candidate[0, :2]
+                own = np.linalg.norm(wrist - pose[frame, wrist_index, :2])
+                other = np.linalg.norm(wrist - pose[frame, other_wrist_index, :2])
+                if not (np.isfinite(pose[frame]).all() and own < other and own < max_wrist_distance):
+                    break
+                candidates.append(candidate)
+            if len(candidates) == end - start:
+                repaired[start:end] = candidates
+                imputed[start:end] = True
         start = end
     return repaired, imputed

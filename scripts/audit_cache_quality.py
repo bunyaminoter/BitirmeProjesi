@@ -37,7 +37,8 @@ def crop_status(path: Path) -> dict:
             seen = np.cumsum(observed) > 0
             if f"{side}_crop_source" in data:
                 src = data[f"{side}_crop_source"][:count]
-                out[f"{side}_fallback_crop"] = int((src == 1).sum())
+                out[f"{side}_fallback_crop"] = int(np.isin(src, [1, 3]).sum())
+                out[f"{side}_center_repaired"] = int((src == 3).sum())
                 out[f"{side}_stale"] = int(((src == 2) & seen).sum())
                 out[f"{side}_before_first"] = int(((src == 2) & ~seen).sum())
             else:
@@ -57,11 +58,14 @@ def summarise(records: list[dict]) -> dict:
         observed = sum(r[f"{side}_observed"] for r in records)
         result[f"{side}_observed_rate"] = round(observed / frames, 4)
         result[f"{side}_stale_crop_rate"] = round(sum(r[f"{side}_stale"] for r in records) / frames, 4)
+        result[f"{side}_stale_crop_frames"] = sum(r[f"{side}_stale"] for r in records)
+        result[f"{side}_before_first_frames"] = sum(r[f"{side}_before_first"] for r in records)
         result[f"{side}_before_first_rate"] = round(
             sum(r[f"{side}_before_first"] for r in records) / frames, 4)
         if any(f"{side}_fallback_crop" in r for r in records):
             result[f"{side}_fallback_crop_rate"] = round(
                 sum(r.get(f"{side}_fallback_crop", 0) for r in records) / frames, 4)
+            result[f"{side}_center_repaired_frames"] = sum(r.get(f"{side}_center_repaired", 0) for r in records)
         runs = [r[f"{side}_max_missing_run"] for r in records]
         result[f"{side}_max_missing_run_videos"] = {
             bucket_name(lo, hi): sum(lo <= v <= hi for v in runs) for lo, hi in RUN_BUCKETS}

@@ -34,6 +34,14 @@ exports/
 cache/
 logs/
 runs/
+scratch/
+temp_extract/
+models/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.zip
 
 # Data (large files)
 videos/

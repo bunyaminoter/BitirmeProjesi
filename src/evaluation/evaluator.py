@@ -37,6 +37,8 @@ class Evaluator:
         model: nn.Module,
         num_classes: int,
         device: Optional[torch.device] = None,
+        mixed_precision: bool = False,
+        collect_predictions: bool = False,
     ) -> None:
         """Initialize the evaluator.
 
@@ -48,6 +50,9 @@ class Evaluator:
         self.model = model
         self.num_classes = num_classes
         self.device = device or torch.device("cpu")
+        self.mixed_precision = mixed_precision
+        self.collect_predictions = collect_predictions
+        self.prediction_records: list[dict[str, object]] = []
         self.metric_calculator = MetricCalculator(num_classes)
 
     @torch.no_grad()
@@ -62,6 +67,7 @@ class Evaluator:
         """
         self.model.eval()
         self.metric_calculator.reset()
+        self.prediction_records = []
 
         total_batches = len(dataloader)
 
@@ -77,7 +83,11 @@ class Evaluator:
             labels = batch_device["labels"]
 
             # Forward pass
-            logits = self.model(batch_device)  # (B, num_classes)
+            with torch.amp.autocast(
+                device_type="cuda" if self.device.type == "cuda" else "cpu",
+                enabled=self.mixed_precision and self.device.type == "cuda",
+            ):
+                logits = self.model(batch_device)  # (B, num_classes)
 
             # Convert to numpy for metric computation
             logits_np = logits.cpu().numpy()
@@ -90,6 +100,24 @@ class Evaluator:
                 labels=labels_np,
                 logits=logits_np,
             )
+
+            if self.collect_predictions:
+                video_ids = batch_device.get("video_ids")
+                if not isinstance(video_ids, list) or len(video_ids) != len(predictions):
+                    raise ValueError("Prediction export requires one video_id per sample")
+                probabilities = torch.softmax(logits.float(), dim=-1).cpu().tolist()
+                self.prediction_records.extend(
+                    {
+                        "video_id": str(video_id),
+                        "true_label": int(label),
+                        "pred_label": int(prediction),
+                        "top1_confidence": float(max(scores)),
+                        "class_probabilities": [float(score) for score in scores],
+                    }
+                    for video_id, label, prediction, scores in zip(
+                        video_ids, labels_np, predictions, probabilities
+                    )
+                )
 
             if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == total_batches:
                 logger.info(

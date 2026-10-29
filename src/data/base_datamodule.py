@@ -60,12 +60,16 @@ class BaseDataModule(ABC):
 
     def _loader_kwargs(self) -> dict[str, Any]:
         """Shared DataLoader kwargs."""
-        return {
+        num_workers = get_effective_num_workers(self.training_config.num_workers)
+        kwargs: dict[str, Any] = {
             "batch_size": self.training_config.batch_size,
-            "num_workers": get_effective_num_workers(self.training_config.num_workers),
+            "num_workers": num_workers,
             "pin_memory": self.training_config.pin_memory,
             "collate_fn": self.collate_fn,
         }
+        if num_workers > 0:
+            kwargs["persistent_workers"] = True
+        return kwargs
 
     def train_dataloader(self) -> DataLoader:
         """Create and return the training DataLoader.

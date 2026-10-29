@@ -162,8 +162,6 @@ class HybridASLModel(nn.Module):
             (B, num_classes) logit tensor.
         """
         pose_landmarks = batch["pose_landmarks"]
-        left_hand_images = batch["left_hand_images"]
-        right_hand_images = batch["right_hand_images"]
         mask = batch.get("mask", None)
 
         B, T = pose_landmarks.shape[:2]
@@ -175,6 +173,8 @@ class HybridASLModel(nn.Module):
         landmark_features = landmark_features.reshape(B, T, -1)  # (B, T, lm_out)
 
         if self.config.use_rgb:
+            left_hand_images = batch["left_hand_images"]
+            right_hand_images = batch["right_hand_images"]
             # --- Encode hand crops per frame ---
             # left_hand_images: (B, T, C, H, W) → (B*T, C, H, W)
             left_flat = left_hand_images.reshape(B * T, *left_hand_images.shape[2:])
@@ -225,6 +225,9 @@ class HybridASLModel(nn.Module):
             ("classifier", self.classifier),
         ]:
             if module is not None:
-                counts[name] = sum(p.numel() for p in module.parameters())
-        counts["total"] = sum(counts.values())
+                counts[name] = (
+                    0 if name == "hand_encoder_right" and module is self.hand_encoder_left
+                    else sum(p.numel() for p in module.parameters())
+                )
+        counts["total"] = sum(p.numel() for p in self.parameters())
         return counts

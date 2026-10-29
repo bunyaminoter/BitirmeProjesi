@@ -43,19 +43,32 @@ class LoggingCallback(BaseCallback):
 
         is_resuming = getattr(trainer, "current_epoch", 0) > 0 and self.csv_path.exists()
         if is_resuming:
-            # Önceki epochların geçmişini yükle
+            # Önceki epochların geçmişini yükle (yalnızca tamamlanmış epochları koru)
             try:
                 self.history = []
                 with open(self.csv_path, mode='r', encoding='utf-8') as f:
                     reader = csv.DictReader(f)
                     for row in reader:
-                        self.history.append({
-                            'epoch': int(row.get('epoch', len(self.history) + 1)),
-                            'train_loss': float(row.get('train_loss', 0.0)),
-                            'train_acc': float(row.get('train_acc', 0.0)),
-                            'val_loss': float(row.get('val_loss', 0.0)),
-                            'val_acc': float(row.get('val_acc', 0.0)),
-                        })
+                        ep = int(row.get('epoch', len(self.history) + 1))
+                        if ep <= trainer.current_epoch:
+                            self.history.append({
+                                'epoch': ep,
+                                'train_loss': float(row.get('train_loss', 0.0)),
+                                'train_acc': float(row.get('train_acc', 0.0)),
+                                'val_loss': float(row.get('val_loss', 0.0)),
+                                'val_acc': float(row.get('val_acc', 0.0)),
+                            })
+                with open(self.csv_path, mode='w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(['epoch', 'train_loss', 'train_acc', 'val_loss', 'val_acc'])
+                    for entry in self.history:
+                        writer.writerow([
+                            entry['epoch'],
+                            entry['train_loss'],
+                            entry['train_acc'],
+                            entry['val_loss'],
+                            entry['val_acc'],
+                        ])
             except Exception:
                 pass
         else:

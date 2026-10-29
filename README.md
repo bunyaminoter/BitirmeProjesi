@@ -2,6 +2,14 @@
 
 Bu proje AUTSL'nin resmî, işaretçiden bağımsız `train` / `val` / `test` bölümlerinde RGB el kırpıntıları ve MediaPipe iskelet özellikleriyle izole işaret tanıma eğitir.
 
+## Güncel durum (29 Ekim 2026)
+
+16 karelik `centerrepair_strict` v1 ön işleme sabitlendi. Seçilmiş 100 sınıfın resmî `val` bölümündeki 1.963 videoda pose-only model 1.678 doğru (%85,48), ConvNeXt-Tiny RGB+pose model 1.688 doğru (%85,99) tahmin verdi. Aynı videolardaki iki model olasılığının önceden belirlenmiş eşit ağırlıklı birleşimi 1.784 doğruya (%90,88) ulaştı. Bu son değer çevrimdışı analiz sonucudur; tek bir çıkarım akışında yeniden doğrulanacaktır. Tam 226 sınıf önbelleği ve model eğitimi henüz tamamlanmadı. Resmî `test` bölümü model seçimine kapalıdır.
+
+Karşılaştırmalar ve sınırlamalar: [AUTSL model eğitimi ilerleme raporu](docs/MODEL_EGITIMI_Ilerleme_Raporu_AUTSL.docx), [100 sınıf sonuç analizi](docs/AUTSL_100_RGB_pose_egitim_sonucu_2026-10-29.md).
+
+Bir sonraki kısa teknik adım, mevcut iki checkpoint'in tek akışta aynı 16 kare ve aynı strict v1 özellikleriyle çalışıp sabit %50/%50 birleşim sonucunu yeniden üretmesini doğrulamaktır. Mobil istemci ve sunucu mimarisi model eğitimi sonrasında değerlendirilecektir.
+
 ## Veri protokolü
 
 - `train`: ağırlıkların öğrenildiği bölüm.
@@ -14,7 +22,7 @@ Eski özel 10 sınıf CSV paketi ve `val+test` birleşimi kullanılmaz. `AUTSL_D
 $env:AUTSL_DATA_DIR = 'C:\Users\Bünyamin\Desktop\AUTSL_Dataset'
 ```
 
-## İlk 10 sınıf deneyi
+## İlk 10 sınıf deneyi (tarihsel akış)
 
 `configs/experiment/autsl_10_mobilenet.yaml`, önceki çalışmadaki on AUTSL sınıfını (özgün sınıf kimlikleri `8, 14, 15, 20, 64, 106, 114, 143, 144, 196`) kullanır. Model etiketleri eğitim için 0–9'a eşlenir; video bölümleri resmî AUTSL ayrımından gelir.
 
@@ -59,6 +67,6 @@ python scripts/evaluate.py --config configs/experiment/autsl_10_mobilenet.yaml -
 
 ## 226 sınıfa geçiş
 
-`configs/experiment/autsl_226_mobilenet_frozen.yaml` tüm 226 AUTSL sınıfını ve aynı resmî bölümleri kullanır. 10 sınıflı deneyin sonucu ve hata analiziyle bir sonraki deneyi birlikte seçtikten sonra bu yapılandırmaya geçilir.
+226 sınıfın resmî metadata kapsamı denetlendi. Tam özellik önbelleği üretilmeden ve kalite kapısı geçilmeden 226 sınıf model eğitimi başlatılmaz. 100 sınıftaki sonuçlar tam veri başarısı olarak sunulmaz.
 
 Deney sırası ve karar ölçütleri için [AUTSL yol haritasına](docs/AUTSL_226_yol_haritasi.md) ve araştırma özeti için [rapora](chatgpt%20raporu.md) bak.

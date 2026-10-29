@@ -1,64 +1,115 @@
 #!/bin/bash
 # ==============================================================================
-# Colab TİD (Türk İşaret Dili / AUTSL) Eğitim Yardımcı Betiği
+# Colab AUTSL 10 Sınıf: Kontrollü Ön İşleme Karşılaştırma Eğitim Betiği
 #
-# Google Drive üzerinden 10 sınıflık TİD modellerini çalıştırır.
-# Kullanım: 
-#   !bash scripts/colab_train.sh configs/experiment/autsl_10_mobilenet.yaml
-#   !bash scripts/colab_train.sh --cv  (5-Fold Cross-Validation)
+# Kullanım:
+#   bash scripts/colab_train.sh --preflight
+#   bash scripts/colab_train.sh --train-base
+#   bash scripts/colab_train.sh --train-candidate
+#   bash scripts/colab_train.sh --evaluate
+#   bash scripts/colab_train.sh --all
 # ==============================================================================
 
-set -e  # Hata olursa dur
+set -e
 
-MODE=${1:-"single"}
-CONFIG=${2:-"configs/experiment/autsl_10_mobilenet.yaml"}
-
-if [ "$1" != "--cv" ] && [ -n "$1" ]; then
-    CONFIG=$1
-fi
-
-EXP_NAME=$(basename "${CONFIG}" .yaml)
-
-# ---- Ortam Değişkenleri ----
 DRIVE_PROJECT="/content/drive/MyDrive/BitirmeProjesi"
-DRIVE_CACHE="${DRIVE_PROJECT}/cache/tid_10_features"
-LOCAL_CACHE="/content/BitirmeProjesi/cache/tid_10_features"
-DRIVE_OUTPUTS="${DRIVE_PROJECT}/outputs"
-WORK_DIR="/content/BitirmeProjesi"
+LOCAL_PROJECT="/content/BitirmeProjesi"
+LOCAL_CACHE="${LOCAL_PROJECT}/cache"
+METADATA_DIR="${DRIVE_PROJECT}/outputs/colab_training_metadata"
+CHECKSUM_FILE="${DRIVE_PROJECT}/outputs/colab_cache_checksums.json"
 
-echo "=========================================================="
-echo "Colab TİD (Türk İşaret Dili / AUTSL) Eğitim Süreci"
-echo "Model Konfigürasyonu: ${CONFIG}"
-echo "=========================================================="
+export AUTSL_DATA_DIR="${METADATA_DIR}"
 
-# 1. Yerel hızlı disk önbelleği hazırla
-echo "[1/3] Cache dosyaları yerel diske eşitleniyor..."
-mkdir -p ${LOCAL_CACHE}
-if [ -d "${DRIVE_CACHE}" ] && [ "$(ls -A ${DRIVE_CACHE})" ]; then
-    echo "1.245 Cache dosyası Drive'dan kopyalanıyor..."
-    cp -rn ${DRIVE_CACHE}/* ${LOCAL_CACHE}/ 2>/dev/null || true
-fi
+run_sync() {
+    echo "[1/4] Yerel disk ve klasörler hazırlanıyor..."
+    mkdir -p "${LOCAL_CACHE}"
+    if [ ! -d "${LOCAL_CACHE}/autsl_10_features" ]; then
+        echo "Temel cache kopyalanıyor..."
+        cp -r "${DRIVE_PROJECT}/cache/autsl_10_features" "${LOCAL_CACHE}/"
+    fi
+    if [ ! -d "${LOCAL_CACHE}/autsl_10_features_centerrepair_strict" ]; then
+        echo "Aday cache kopyalanıyor..."
+        cp -r "${DRIVE_PROJECT}/cache/autsl_10_features_centerrepair_strict" "${LOCAL_CACHE}/"
+    fi
+}
 
-# 2. Bağımlılıkları kontrol et
-echo "[2/3] Bağımlılıklar doğrulanıyor..."
-pip install -q pyyaml matplotlib rich opencv-python scikit-learn
+run_preflight() {
+    run_sync
+    echo "[2/4] Preflight SHA256 ve tensor bütünlük denetimi başlatılıyor..."
+    cd "${LOCAL_PROJECT}"
+    python scripts/check_colab_inputs.py \
+        --metadata_dir "${METADATA_DIR}" \
+        --checksum_manifest "${CHECKSUM_FILE}" \
+        --base_cache "${LOCAL_CACHE}/autsl_10_features" \
+        --candidate_cache "${LOCAL_CACHE}/autsl_10_features_centerrepair_strict" \
+        --output outputs/colab_preflight_uploaded.json
+    echo "✅ Preflight başarıyla tamamlandı!"
+}
 
-# 3. Eğitimi başlat
-cd ${WORK_DIR}
-if [ "$1" == "--cv" ]; then
-    echo "[3/3] 5-Fold Cross-Validation ve Ensemble Başlatılıyor..."
-    python scripts/train_cv.py \
-        --config "${CONFIG}" \
-        --n_splits 5 \
-        --cache_dir "${LOCAL_CACHE}"
-else
-    echo "[3/3] Standart Model Eğitimi Başlatılıyor..."
+run_train_base() {
+    echo "🚀 Temel model eğitimi başlıyor (autsl_10_base16_screen)..."
+    cd "${LOCAL_PROJECT}"
     python scripts/train.py \
-        --config "${CONFIG}" \
-        --cache_dir "${LOCAL_CACHE}"
-fi
+        --config configs/experiment/autsl_10_base16_screen.yaml \
+        --cache_dir "${LOCAL_CACHE}/autsl_10_features"
+}
 
-echo "=========================================================="
-echo "✅ İşlem başarıyla tamamlandı!"
-echo "Çıktılar Drive'a kaydedildi: ${DRIVE_OUTPUTS}"
-echo "=========================================================="
+run_train_candidate() {
+    echo "🚀 Merkez onarımlı aday model eğitimi başlıyor (autsl_10_centerrepair_screen)..."
+    cd "${LOCAL_PROJECT}"
+    python scripts/train.py \
+        --config configs/experiment/autsl_10_centerrepair_screen.yaml \
+        --cache_dir "${LOCAL_CACHE}/autsl_10_features_centerrepair_strict"
+}
+
+run_eval() {
+    echo "📊 Resmi val değerlendirmesi yapılıyor..."
+    cd "${LOCAL_PROJECT}"
+    python scripts/evaluate.py \
+        --config configs/experiment/autsl_10_base16_screen.yaml \
+        --cache_dir "${LOCAL_CACHE}/autsl_10_features" \
+        --checkpoint "${DRIVE_PROJECT}/outputs/autsl_10_base16_screen/checkpoints/best_model.pt" \
+        --split val \
+        --output outputs/base16_val.json
+
+    python scripts/evaluate.py \
+        --config configs/experiment/autsl_10_centerrepair_screen.yaml \
+        --cache_dir "${LOCAL_CACHE}/autsl_10_features_centerrepair_strict" \
+        --checkpoint "${DRIVE_PROJECT}/outputs/autsl_10_centerrepair_screen/checkpoints/best_model.pt" \
+        --split val \
+        --output outputs/centerrepair_val.json
+    echo "✅ Değerlendirme tamamlandı. Çıktılar outputs/ altında kaydedildi."
+}
+
+ACTION=${1:-"--all"}
+
+case "${ACTION}" in
+    --sync)
+        run_sync
+        ;;
+    --preflight)
+        run_preflight
+        ;;
+    --train-base)
+        run_sync
+        run_train_base
+        ;;
+    --train-candidate)
+        run_sync
+        run_train_candidate
+        ;;
+    --evaluate)
+        run_eval
+        ;;
+    --all)
+        run_preflight
+        run_train_base
+        run_train_candidate
+        run_eval
+        ;;
+    *)
+        echo "Bilinmeyen parametre: ${ACTION}"
+        echo "Kullanım: bash scripts/colab_train.sh [--sync|--preflight|--train-base|--train-candidate|--evaluate|--all]"
+        exit 1
+        ;;
+esac

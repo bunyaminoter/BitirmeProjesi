@@ -1,0 +1,42 @@
+{
+  "source_cache": "G:\\Drive'ım\\BitirmeProjesi\\cache\\autsl_100_features_base16",
+  "batch_size": 2000,
+  "splits": {
+    "train": {
+      "official": 28142,
+      "reusable": 12405,
+      "remaining": 15737,
+      "batches": [
+        "train_01.json",
+        "train_02.json",
+        "train_03.json",
+        "train_04.json",
+        "train_05.json",
+        "train_06.json",
+        "train_07.json",
+        "train_08.json"
+      ]
+    },
+    "val": {
+      "official": 4418,
+      "reusable": 1963,
+      "remaining": 2455,
+      "batches": [
+        "val_01.json",
+        "val_02.json"
+      ]
+    }
+  },
+  "files": [
+    "train_01.json",
+    "train_02.json",
+    "train_03.json",
+    "train_04.json",
+    "train_05.json",
+    "train_06.json",
+    "train_07.json",
+    "train_08.json",
+    "val_01.json",
+    "val_02.json"
+  ]
+}

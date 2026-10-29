@@ -103,3 +103,38 @@ class TestTransformerTemporal:
         x = torch.randn(4, 16, 256)
         output = model(x)
         assert output.shape == (4, 128)
+
+
+def test_shared_hand_encoder_parameters_count_once():
+    from src.models.hybrid_model import HybridASLModel
+
+    config = ModelConfig(
+        num_classes=10,
+        hand_encoder=HandEncoderConfig(
+            backbone="mobilenet_v3_small", pretrained=False, shared_weights=True
+        ),
+    )
+    model = HybridASLModel(config)
+    counts = model.get_num_parameters()
+
+    assert model.hand_encoder_left is model.hand_encoder_right
+    assert counts["hand_encoder_right"] == 0
+    assert counts["total"] == sum(parameter.numel() for parameter in model.parameters())
+    assert counts["total"] == sum(value for key, value in counts.items() if key != "total")
+
+
+@pytest.mark.parametrize(
+    ("backbone_name", "expected_dim"),
+    [("convnext_tiny", 768), ("efficientnet_v2_s", 1280)],
+)
+def test_stronger_rgb_backbones_extract_features(backbone_name, expected_dim):
+    """New RGB candidates must provide frame features without a classifier."""
+    from src.models.encoders.hand_cnn_encoder import _build_backbone
+
+    backbone, out_dim = _build_backbone(backbone_name, pretrained=False)
+    backbone.eval()
+    with torch.inference_mode():
+        features = backbone(torch.randn(1, 3, 64, 64))
+
+    assert out_dim == expected_dim
+    assert features.shape == (1, expected_dim)

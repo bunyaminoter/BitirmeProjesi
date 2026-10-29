@@ -1,0 +1,185 @@
+# Preprocessing input only; no 100-class training authorized yet.
+name: autsl_100_preprocess_base16
+seed: 42
+device: auto
+output_dir: outputs/autsl_100_preprocess_base16/
+dataset:
+  name: autsl
+  annotation_file: data/autsl
+  data_dir: data/autsl
+  video_dir: data/autsl
+  num_classes: 100
+  class_ids:
+  - 0
+  - 2
+  - 3
+  - 4
+  - 7
+  - 8
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 17
+  - 18
+  - 20
+  - 21
+  - 22
+  - 25
+  - 27
+  - 28
+  - 29
+  - 30
+  - 31
+  - 33
+  - 34
+  - 40
+  - 43
+  - 44
+  - 47
+  - 49
+  - 56
+  - 59
+  - 60
+  - 62
+  - 63
+  - 64
+  - 66
+  - 69
+  - 70
+  - 71
+  - 72
+  - 73
+  - 74
+  - 76
+  - 77
+  - 82
+  - 83
+  - 85
+  - 88
+  - 89
+  - 96
+  - 98
+  - 100
+  - 102
+  - 103
+  - 106
+  - 107
+  - 108
+  - 109
+  - 110
+  - 114
+  - 115
+  - 125
+  - 130
+  - 139
+  - 141
+  - 142
+  - 143
+  - 144
+  - 148
+  - 151
+  - 153
+  - 154
+  - 157
+  - 159
+  - 163
+  - 168
+  - 169
+  - 170
+  - 172
+  - 173
+  - 175
+  - 181
+  - 183
+  - 186
+  - 189
+  - 192
+  - 194
+  - 196
+  - 197
+  - 199
+  - 201
+  - 202
+  - 203
+  - 206
+  - 207
+  - 208
+  - 218
+  - 219
+  - 220
+  - 224
+  num_frames: 16
+  cache_dir: cache/autsl_100_features_base16
+  class_list_file: data/autsl/autsl_class_list_100.txt
+  train_split: train
+  val_split: val
+  test_split: test
+model:
+  use_rgb: true
+  num_classes: 100
+  classifier_dropout: 0.4
+  hand_encoder:
+    backbone: mobilenet_v3_small
+    pretrained: true
+    freeze_backbone: true
+    output_dim: 256
+    input_size:
+    - 160
+    - 160
+    shared_weights: true
+    dropout: 0.3
+    use_cbam: false
+  landmark_encoder:
+    encoder_type: landmark_mlp
+    input_dim: 225
+    hidden_dims:
+    - 256
+    - 128
+    output_dim: 256
+    dropout: 0.3
+    use_batch_norm: true
+    include_face: false
+    num_pose_landmarks: 75
+  fusion:
+    method: cross_attention
+    output_dim: 256
+    dropout: 0.2
+    num_heads: 4
+  temporal:
+    method: tcn_transformer
+    hidden_dim: 256
+    num_layers: 2
+    dropout: 0.3
+    num_heads: 4
+    max_seq_len: 32
+training:
+  epochs: 60
+  batch_size: 16
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  optimizer: adamw
+  scheduler: cosine
+  mixed_precision: true
+  gradient_clip: 1.0
+  num_workers: 2
+  pin_memory: true
+  early_stopping_patience: 15
+  checkpoint_dir: outputs/autsl_100_preprocess_base16/checkpoints/
+  log_every_n_steps: 10
+  val_every_n_epochs: 1
+  warmup_epochs: 3
+  label_smoothing: 0.05
+augmentation:
+  enabled: true
+  random_crop: false
+  random_horizontal_flip: false
+  random_rotation: 0.0
+  random_brightness: 0.15
+  pose_jitter_std: 0.01
+  frame_drop_prob: 0.0
+  random_speed_range:
+  - 0.85
+  - 1.15
+  hand_random_translation: 0

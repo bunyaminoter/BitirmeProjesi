@@ -22,7 +22,6 @@ sys.path.insert(0, str(project_root))
 
 from src.core.config import ExperimentConfig, load_config
 from src.data.tid_datamodule import TIDDataModule
-from src.evaluation.evaluator import Evaluator
 from src.models.hybrid_model import HybridASLModel
 from src.training.callbacks.checkpoint import CheckpointCallback
 from src.training.callbacks.early_stopping import EarlyStoppingCallback
@@ -84,11 +83,13 @@ def resolve_environment(config: ExperimentConfig, args: argparse.Namespace) -> s
             args.cache_dir = config.dataset.cache_dir
         if os.path.exists("/content/drive"):
             drive_project = "/content/drive/MyDrive/BitirmeProjesi"
-            if args.cache_dir == config.dataset.cache_dir:
-                cache_name = os.path.basename(os.path.normpath(config.dataset.cache_dir))
-                local_cache = f"/content/BitirmeProjesi/cache/{cache_name}"
-                drive_cache = f"{drive_project}/cache/{cache_name}"
-                args.cache_dir = local_cache if os.path.isdir(local_cache) else drive_cache
+            cache_name = os.path.basename(os.path.normpath(args.cache_dir or config.dataset.cache_dir))
+            local_cache = f"/content/BitirmeProjesi/cache/{cache_name}"
+            drive_cache = f"{drive_project}/cache/{cache_name}"
+            if os.path.isdir(local_cache) and (os.path.isdir(f"{local_cache}/train") or os.listdir(local_cache)):
+                args.cache_dir = local_cache
+            elif not os.path.isdir(args.cache_dir) and os.path.isdir(drive_cache):
+                args.cache_dir = drive_cache
             config.output_dir = f"{drive_project}/outputs/{config.name}/"
             config.training.checkpoint_dir = f"{config.output_dir}checkpoints/"
             return "Colab"
@@ -190,6 +191,7 @@ def main() -> None:
         augmentation_config=config.augmentation,
         hand_image_size=tuple(config.model.hand_encoder.input_size),
         landmark_dim=config.model.landmark_encoder.input_dim,
+        load_rgb=config.model.use_rgb,
     )
     datamodule.setup(stage="fit")
 
@@ -352,22 +354,7 @@ def main() -> None:
     log.info(f"Best validation accuracy: {trainer.best_metric:.4f}")
     log.info("=" * 60)
 
-    # --- 10. Run Test Set Evaluation if available ---
-    try:
-        test_loader = datamodule.test_dataloader()
-        if test_loader is not None and len(test_loader) > 0:
-            log.info("=" * 60)
-            log.info("Evaluating Best Model on TEST set...")
-            log.info("=" * 60)
-            best_path = checkpoint_dir / "best_model.pt"
-            if best_path.exists():
-                trainer.load_checkpoint(best_path)
-            test_metrics = trainer.evaluate(test_loader)
-            log.info(f"🏆 Final TEST Accuracy: {test_metrics.get('accuracy', 0.0):.4f}")
-            log.info(f"🏆 Final TEST Loss:     {test_metrics.get('loss', 0.0):.4f}")
-            log.info("=" * 60)
-    except Exception as e:
-        log.warning(f"Test evaluation skipped: {e}")
+    log.info("Training finished after train/val. Run scripts/evaluate.py explicitly when ready.")
 
 
 

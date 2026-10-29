@@ -197,6 +197,7 @@ def main():
         log.info(f"[*] {split.upper()}: {n} video işlenecek ({len(ds.class_to_idx)} sınıf)")
 
         processed, skipped, failed = 0, 0, 0
+        failed_records = []
         for i in tqdm(indices, desc=f"TİD {split}", leave=True):
             sample = ds.get_metadata(i)
 
@@ -208,6 +209,7 @@ def main():
             if not vid_path.exists():
                 log.warning(f"Video bulunamadı: {vid_path}")
                 failed += 1
+                failed_records.append({"video_id": sample.video_id, "split": split, "reason": "not_found", "path": str(vid_path)})
                 continue
 
             try:
@@ -215,9 +217,11 @@ def main():
             except Exception as e:
                 log.error(f"Video okuma hatası ({sample.video_id}): {e}")
                 failed += 1
+                failed_records.append({"video_id": sample.video_id, "split": split, "reason": "read_error", "error": str(e)})
                 continue
             if not frames:
                 failed += 1
+                failed_records.append({"video_id": sample.video_id, "split": split, "reason": "empty_frames"})
                 continue
 
             all_pose, all_left_hand, all_right_hand, all_left_crop, all_right_crop = [], [], [], [], []
@@ -265,6 +269,26 @@ def main():
 
         total_processed += processed
         log.info(f"[{split.upper()}] {processed} işlendi, {skipped} cache'den atlandı, {failed} hatalı.")
+
+        failure_report = {
+            "split": split,
+            "processed": processed,
+            "skipped": skipped,
+            "failed_count": failed,
+            "failed_videos": failed_records,
+        }
+        fail_path = cache_dir / f"preprocessing_failures_{split}.json"
+        fail_path.write_text(json.dumps(failure_report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        outputs_dir = project_root / "outputs"
+        outputs_dir.mkdir(parents=True, exist_ok=True)
+        fail_path_out = outputs_dir / f"{cache_dir.name}_preprocessing_failures_{split}.json"
+        fail_path_out.write_text(json.dumps(failure_report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        if failed_records:
+            log.warning(f"⚠️ {len(failed_records)} hatalı video kaydedildi: {fail_path} ve {fail_path_out}")
+        else:
+            log.info(f"✅ {split.upper()} splitinde hata yok ({fail_path_out}).")
 
     extractor.close()
 

@@ -165,6 +165,9 @@ class DatasetConfig:
     num_frames: Optional[int] = 16
     cache_dir: str = "cache/features"
     cache_derivation: Optional[str] = None
+    cache_derivation_version: Optional[int] = None
+    fallback_box_scale: float = 1.0
+    fallback_center_repair: Optional[Dict[str, Any]] = None
     max_repair_gap: Optional[int] = None
     class_list_file: str = "cache/autsl_class_list_226.txt"
     train_split: str = "train"

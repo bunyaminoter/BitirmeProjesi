@@ -46,3 +46,21 @@ def test_rejects_wrong_hand_or_missing_pose():
         wrist_index=15, other_wrist_index=16,
     )
     assert not imputed.any()
+
+
+def test_rejects_out_of_frame_endpoint_and_non_linear_wrist_motion():
+    hand = np.zeros((3, 21, 3), dtype=np.float32)
+    hand[[0, 2], :, :2] = [0.2, 0.5]
+    pose = np.zeros((3, 33, 3), dtype=np.float32)
+    pose[:, 15, :2] = [0.2, 0.5]
+    pose[:, 16, :2] = [0.8, 0.5]
+    observed = np.array([True, False, True])
+    kwargs = dict(wrist_index=15, other_wrist_index=16)
+    hand[0, 20, 0] = -0.1
+    repaired, imputed = repair_hand_gaps(hand, observed, pose, np.ones(3, dtype=bool), **kwargs)
+    assert not imputed.any()
+    assert np.array_equal(repaired, hand)  # never clamp measured landmarks
+    hand[0, 20, 0] = 0.2
+    pose[1, 15, 1] = 0.9  # endpoints fit but the real wrist moves away in between
+    _, imputed = repair_hand_gaps(hand, observed, pose, np.ones(3, dtype=bool), **kwargs)
+    assert not imputed.any()

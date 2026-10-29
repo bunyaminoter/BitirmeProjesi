@@ -22,9 +22,14 @@ class CacheAugmentation:
             return sample
 
         pose = sample["pose_landmarks"]
-        left = sample["left_hand_images"]
-        right = sample["right_hand_images"]
+        left = sample.get("left_hand_images")
+        right = sample.get("right_hand_images")
         mask = sample["mask"]
+        has_rgb = (
+            left is not None
+            and right is not None
+            and left.shape[-1] > 1
+        )
 
         # Temporal Resampling (Speed Augmentation)
         speed_range = getattr(self.config, "random_speed_range", [1.0, 1.0])
@@ -36,14 +41,15 @@ class CacheAugmentation:
         # Spatial Augmentations
         rotation = getattr(self.config, "random_rotation", 0.0)
         translation = getattr(self.config, "hand_random_translation", 0)
-        if rotation > 0 or translation > 0:
+        if (rotation > 0 or translation > 0) and has_rgb:
             left, right = self._spatial_transform(left, right, rotation, translation)
 
         if self.config.random_horizontal_flip and torch.rand(1).item() < 0.5:
-            left, right = right.clone(), left.clone()
+            if left is not None and right is not None:
+                left, right = right.clone(), left.clone()
             pose = self._flip_pose(pose)
 
-        if self.config.random_brightness > 0:
+        if self.config.random_brightness > 0 and has_rgb:
             left = self._jitter_brightness(left)
             right = self._jitter_brightness(right)
 
@@ -54,15 +60,16 @@ class CacheAugmentation:
 
         # Random Erasing (Cutout)
         erasing_prob = getattr(self.config, "random_erasing_prob", 0.0)
-        if erasing_prob > 0:
+        if erasing_prob > 0 and has_rgb:
             left = self._random_erase(left, erasing_prob)
             right = self._random_erase(right, erasing_prob)
 
         sample = dict(sample)
         sample["pose_landmarks"] = pose
         sample["mask"] = mask
-        sample["left_hand_images"] = left.clamp(0.0, 1.0)
-        sample["right_hand_images"] = right.clamp(0.0, 1.0)
+        if left is not None and right is not None:
+            sample["left_hand_images"] = left.clamp(0.0, 1.0)
+            sample["right_hand_images"] = right.clamp(0.0, 1.0)
         return sample
 
     def _spatial_transform(self, left: torch.Tensor, right: torch.Tensor, rot_range: float, trans_range: float) -> tuple[torch.Tensor, torch.Tensor]:
@@ -74,24 +81,21 @@ class CacheAugmentation:
         right = TF.affine(right, angle=angle, translate=[tx, ty], scale=1.0, shear=0.0)
         return left, right
 
-    def _resample_temporal(self, pose: torch.Tensor, left: torch.Tensor, right: torch.Tensor, mask: torch.Tensor, speed: float) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _resample_temporal(
+        self,
+        pose: torch.Tensor,
+        left: Optional[torch.Tensor],
+        right: Optional[torch.Tensor],
+        mask: torch.Tensor,
+        speed: float,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor], torch.Tensor]:
         import torch.nn.functional as F
         T = pose.shape[0]
         valid_T = max(1, int(mask.sum().item()))
         new_T = max(1, int(round(valid_T / speed)))
-        pose, left, right = pose[:valid_T], left[:valid_T], right[:valid_T]
-        
-        pose_D = pose.shape[1]
+        pose = pose[:valid_T]
         pose_resampled = F.interpolate(pose.t().unsqueeze(0), size=new_T, mode='linear', align_corners=False).squeeze(0).t()
-        
-        C, H, W = left.shape[1:]
-        def resample_images(imgs):
-            imgs_res = F.interpolate(imgs.reshape(valid_T, C*H*W).t().unsqueeze(0), size=new_T, mode='linear', align_corners=False)
-            return imgs_res.squeeze(0).t().reshape(new_T, C, H, W)
-            
-        left_resampled = resample_images(left)
-        right_resampled = resample_images(right)
-        
+
         def pad_or_trunc(tensor, target_len):
             if tensor.shape[0] >= target_len:
                 return tensor[:target_len]
@@ -99,9 +103,22 @@ class CacheAugmentation:
             pad_shape[0] = target_len - tensor.shape[0]
             padding = torch.zeros(pad_shape, dtype=tensor.dtype, device=tensor.device)
             return torch.cat([tensor, padding], dim=0)
-            
+
+        left_out: Optional[torch.Tensor] = None
+        right_out: Optional[torch.Tensor] = None
+        if left is not None and right is not None:
+            left_valid, right_valid = left[:valid_T], right[:valid_T]
+            C, H, W = left_valid.shape[1:]
+
+            def resample_images(imgs):
+                imgs_res = F.interpolate(imgs.reshape(valid_T, C * H * W).t().unsqueeze(0), size=new_T, mode='linear', align_corners=False)
+                return imgs_res.squeeze(0).t().reshape(new_T, C, H, W)
+
+            left_out = pad_or_trunc(resample_images(left_valid), T)
+            right_out = pad_or_trunc(resample_images(right_valid), T)
+
         new_mask = torch.arange(T, device=mask.device) < min(new_T, T)
-        return pad_or_trunc(pose_resampled, T), pad_or_trunc(left_resampled, T), pad_or_trunc(right_resampled, T), new_mask
+        return pad_or_trunc(pose_resampled, T), left_out, right_out, new_mask
 
     def _random_erase(self, images: torch.Tensor, prob: float) -> torch.Tensor:
         from torchvision.transforms import RandomErasing

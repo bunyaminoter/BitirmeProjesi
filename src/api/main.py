@@ -5,8 +5,6 @@ import tempfile
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-import cv2
-import numpy as np
 import torch
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
@@ -17,8 +15,7 @@ sys.path.insert(0, str(project_root))
 
 from src.core.config import load_config
 from src.models.hybrid_model import HybridASLModel
-from src.preprocessing.hand_cropper import HandCropper
-from src.preprocessing.mediapipe_extractor import MediaPipeLandmarkExtractor
+from src.preprocessing.inference_pipeline import prepare_inference_batch, sample_video_frames
 from src.utils.device import get_device
 
 # Varsayılan yapılandırma ve model yolları
@@ -50,29 +47,7 @@ def load_class_names(class_list_file: str) -> dict:
     return mapping
 
 def sample_frames_from_video(video_path: str, num_frames: int) -> list:
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        return []
-
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    if total <= 0:
-        cap.release()
-        return []
-
-    if total <= num_frames:
-        indices = list(range(total))
-    else:
-        indices = np.linspace(0, total - 1, num_frames, dtype=int).tolist()
-
-    frames = []
-    for idx in indices:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-        ret, frame = cap.read()
-        if ret:
-            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-
-    cap.release()
-    return frames
+    return sample_video_frames(video_path, num_frames)
 
 # Sunucu başlarken modeli belleğe yükle
 @asynccontextmanager
@@ -97,10 +72,11 @@ async def lifespan(app: FastAPI):
             model.load_state_dict(checkpoint["model_state_dict"])
             print("Model loaded successfully!")
         else:
-            print(f"WARNING: Checkpoint not found at {CHECKPOINT_PATH}. Model is randomly initialized!")
+            raise FileNotFoundError(CHECKPOINT_PATH)
             
         model.eval()
     except Exception as e:
+        model = None
         print(f"Error initializing model: {e}")
         
     yield
@@ -148,61 +124,8 @@ async def predict(file: UploadFile = File(...)):
         if not frames:
             raise HTTPException(status_code=400, detail="Could not read video frames.")
             
-        # 3. MediaPipe ile özellikleri (iskelet & el görüntüleri) çıkart
-        extractor = MediaPipeLandmarkExtractor(enable_face=config.model.landmark_encoder.include_face)
-        cropper = HandCropper(output_size=tuple(config.model.hand_encoder.input_size), padding_ratio=0.2)
-        
-        all_pose, all_left_crops, all_right_crops = [], [], []
-        
-        for frame in frames:
-            result = extractor.extract(frame)
-            
-            if result.pose is not None:
-                all_pose.append(result.pose.reshape(-1))
-            else:
-                all_pose.append(np.zeros(33 * 3, dtype=np.float32))
-                
-            left_crop, right_crop = cropper.crop_hands(frame, result)
-            all_left_crops.append(left_crop.image)
-            all_right_crops.append(right_crop.image)
-            
-        extractor.close()
-        
-        # 4. Veriyi tensor formatına getir ve pad (doldurma) yap
-        def pad_list(lst, target_len, default_fn):
-            while len(lst) < target_len:
-                lst.append(default_fn())
-            return lst[:target_len]
+        batch = prepare_inference_batch(frames, config, device)
 
-        num_frames = config.dataset.num_frames
-        lm_dim = config.model.landmark_encoder.input_dim
-        
-        all_pose = pad_list(all_pose, num_frames, lambda: np.zeros(lm_dim, dtype=np.float32))
-        
-        h, w = config.model.hand_encoder.input_size
-        all_left_crops = pad_list(all_left_crops, num_frames, lambda: np.zeros((h, w, 3), dtype=np.uint8))
-        all_right_crops = pad_list(all_right_crops, num_frames, lambda: np.zeros((h, w, 3), dtype=np.uint8))
-        
-        pose_tensor = torch.from_numpy(np.stack(all_pose, axis=0)).float().unsqueeze(0).to(device)
-        
-        left_imgs = np.stack(all_left_crops, axis=0).astype(np.float32) / 255.0
-        left_imgs = left_imgs.transpose(0, 3, 1, 2)
-        left_tensor = torch.from_numpy(left_imgs).float().unsqueeze(0).to(device)
-        
-        right_imgs = np.stack(all_right_crops, axis=0).astype(np.float32) / 255.0
-        right_imgs = right_imgs.transpose(0, 3, 1, 2)
-        right_tensor = torch.from_numpy(right_imgs).float().unsqueeze(0).to(device)
-        
-        mask = torch.ones(1, num_frames, dtype=torch.bool, device=device)
-        mask[0, len(frames):] = False
-        
-        batch = {
-            "pose_landmarks": pose_tensor,
-            "left_hand_images": left_tensor,
-            "right_hand_images": right_tensor,
-            "mask": mask,
-        }
-        
         # 5. Modeli çalıştır
         with torch.no_grad():
             logits = model(batch)

@@ -14,8 +14,9 @@ dataset:
   # AUTSL'nin özgün ClassId değerleri; model bunları sırasıyla 0..9'a eşler.
   class_ids: [8, 14, 15, 20, 64, 106, 114, 143, 144, 196]
   num_frames: 16
-  cache_dir: cache/autsl_10_features_gap2
+  cache_dir: cache/autsl_10_features_gap2_v2
   cache_derivation: short_hand_gap_linear
+  cache_derivation_version: 2
   max_repair_gap: 2
   class_list_file: cache/autsl_class_list_10.txt
   train_split: train

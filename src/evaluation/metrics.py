@@ -134,6 +134,7 @@ class MetricCalculator:
         # Per-class metrics
         per_class_precision: Dict[int, float] = {}
         per_class_recall: Dict[int, float] = {}
+        per_class_f1: Dict[int, float] = {}
         per_class_accuracy: Dict[int, float] = {}
 
         for cls in range(self.num_classes):
@@ -147,9 +148,11 @@ class MetricCalculator:
 
             precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
             recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
             per_class_precision[cls] = precision
             per_class_recall[cls] = recall
+            per_class_f1[cls] = f1
             per_class_accuracy[cls] = recall  # Per-class accuracy == recall
 
         # Macro averages
@@ -164,11 +167,7 @@ class MetricCalculator:
             if active_classes > 0
             else 0.0
         )
-        f1_macro = (
-            2 * precision_macro * recall_macro / (precision_macro + recall_macro)
-            if (precision_macro + recall_macro) > 0
-            else 0.0
-        )
+        f1_macro = sum(per_class_f1.values()) / active_classes if active_classes > 0 else 0.0
 
         # Weighted averages
         class_counts = np.bincount(labels, minlength=self.num_classes)
@@ -184,12 +183,10 @@ class MetricCalculator:
             for cls in range(self.num_classes)
         ) / total_samples if total_samples > 0 else 0.0
 
-        f1_weighted = (
-            2 * precision_weighted * recall_weighted
-            / (precision_weighted + recall_weighted)
-            if (precision_weighted + recall_weighted) > 0
-            else 0.0
-        )
+        f1_weighted = sum(
+            per_class_f1.get(cls, 0.0) * class_counts[cls]
+            for cls in range(self.num_classes)
+        ) / total_samples if total_samples > 0 else 0.0
 
         return MetricResult(
             accuracy=accuracy,

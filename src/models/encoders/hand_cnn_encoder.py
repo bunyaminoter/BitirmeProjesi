@@ -34,6 +34,7 @@ _BACKBONE_REGISTRY: Dict[str, tuple] = {
     "mobilenet_v3_large": ("mobilenet_v3_large", "IMAGENET1K_V1", 960),
     "efficientnet_b0": ("efficientnet_b0", "IMAGENET1K_V1", 1280),
     "efficientnet_b2": ("efficientnet_b2", "IMAGENET1K_V1", 1408),
+    "efficientnet_v2_s": ("efficientnet_v2_s", "IMAGENET1K_V1", 1280),
     "convnext_tiny": ("convnext_tiny", "IMAGENET1K_V1", 768),
     "convnext_small": ("convnext_small", "IMAGENET1K_V1", 768),
     "swin_t": ("swin_t", "IMAGENET1K_V1", 768),
@@ -124,10 +125,11 @@ def _build_backbone(
             nn.Flatten(),
         )
     elif name.startswith("convnext"):
-        # ConvNeXt: use .features only
+        # Keep the pretrained final normalization before the projection head.
         features = nn.Sequential(
             model.features,
-            nn.AdaptiveAvgPool2d(1),
+            model.avgpool,
+            model.classifier[0],
             nn.Flatten(),
         )
     elif name.startswith("swin"):
@@ -168,7 +170,7 @@ class HandCNNEncoder(BaseEncoder):
 
     Supports multiple backbone architectures:
         - resnet18, resnet34, resnet50
-        - efficientnet_b0, efficientnet_b2
+        - efficientnet_b0, efficientnet_b2, efficientnet_v2_s
         - mobilenet_v3_small, mobilenet_v3_large
         - convnext_tiny, convnext_small
 

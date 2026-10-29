@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--source_cache", type=Path,
                         default=project_root / "cache/autsl_10_features")
     parser.add_argument("--dest_cache", type=Path,
-                        default=project_root / "cache/autsl_10_features_gap2_pilot")
+                        default=project_root / "cache/autsl_10_features_gap2_v2_pilot")
     parser.add_argument("--video_ids_file", type=Path, default=None)
     parser.add_argument("--splits", nargs="+", choices=["train", "val"], default=["train", "val"])
     parser.add_argument("--max_gap", type=int, default=2)
@@ -37,7 +37,7 @@ def main():
         parser.error("Source must be an unmodified AUTSL cache")
     manifest["derivation"] = {
         "method": "short_hand_gap_linear",
-        "version": 1,
+        "version": 2,
         "max_gap": args.max_gap,
         "source_manifest_sha256": hashlib.sha256(source_manifest_bytes).hexdigest(),
     }

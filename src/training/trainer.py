@@ -187,14 +187,7 @@ class Trainer:
                     + (" (EMA)" if self.ema is not None else "")
                 )
 
-                self._dispatch(
-                    "on_validation_end",
-                    trainer=self,
-                    epoch=epoch,
-                    metrics=val_metrics,
-                )
-
-                # Track best metric
+                # Track best metric before checkpoint saving
                 val_acc = val_metrics.get("val_accuracy", val_metrics.get("accuracy", 0.0))
                 if val_acc > self.best_metric:
                     self.best_metric = val_acc
@@ -202,7 +195,7 @@ class Trainer:
                         f"  ★ New best val accuracy: {self.best_metric:.4f}"
                     )
 
-            # --- LR Scheduler step (epoch-level) ---
+            # --- LR Scheduler step (epoch-level, before saving checkpoints) ---
             if self.scheduler is not None:
                 if hasattr(self.scheduler, "step"):
                     # Check if scheduler or wrapped scheduler is ReduceLROnPlateau
@@ -219,6 +212,14 @@ class Trainer:
                         self.scheduler.step(metric)
                     else:
                         self.scheduler.step()
+
+            if val_metrics:
+                self._dispatch(
+                    "on_validation_end",
+                    trainer=self,
+                    epoch=epoch,
+                    metrics=val_metrics,
+                )
 
             # Log current LR
             current_lr = self.optimizer.param_groups[0]["lr"]
@@ -272,7 +273,12 @@ class Trainer:
         else:
             batch_iterable = loader
 
-        pbar = tqdm(batch_iterable, desc=f"Epoch {self.current_epoch + 1}/{self.config.training.epochs} [Train]", leave=False)
+        pbar = tqdm(
+            batch_iterable,
+            desc=f"Epoch {self.current_epoch + 1}/{self.config.training.epochs} [Train]",
+            leave=False,
+            mininterval=5.0,
+        )
         for batch_idx, batch in enumerate(pbar):
             # Move batch tensors to device
             batch = self._move_to_device(batch)
@@ -398,7 +404,12 @@ class Trainer:
         else:
             batch_iterable = loader
 
-        pbar = tqdm(batch_iterable, desc=f"Epoch {self.current_epoch + 1}/{self.config.training.epochs} [Val]", leave=False)
+        pbar = tqdm(
+            batch_iterable,
+            desc=f"Epoch {self.current_epoch + 1}/{self.config.training.epochs} [Val]",
+            leave=False,
+            mininterval=5.0,
+        )
         with torch.no_grad():
             for batch in pbar:
                 batch = self._move_to_device(batch)

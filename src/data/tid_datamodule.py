@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import json
+import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -49,6 +50,7 @@ class CachedTIDDataset(Dataset):
         hand_image_size: tuple[int, int] = (160, 160),
         augment: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
         indices: Optional[List[int]] = None,
+        load_rgb: bool = True,
     ) -> None:
         self.base_dataset = base_dataset
         self.cache_dir = Path(cache_dir)
@@ -56,6 +58,7 @@ class CachedTIDDataset(Dataset):
         self.landmark_dim = landmark_dim
         self.hand_image_size = hand_image_size
         self.augment = augment
+        self.load_rgb = load_rgb
 
         if base_dataset.config.name == "autsl":
             manifest_path = self.cache_dir / "manifest.json"
@@ -71,6 +74,10 @@ class CachedTIDDataset(Dataset):
                 or manifest.get("class_ids") != base_dataset.config.class_ids
                 or (manifest.get("derivation") or {}).get("method") != base_dataset.config.cache_derivation
                 or (manifest.get("derivation") or {}).get("max_gap") != base_dataset.config.max_repair_gap
+                or (base_dataset.config.cache_derivation_version is not None
+                    and (manifest.get("derivation") or {}).get("version") != base_dataset.config.cache_derivation_version)
+                or (manifest.get("derivation") or {}).get("box_scale", 1.0) != base_dataset.config.fallback_box_scale
+                or (manifest.get("derivation") or {}).get("center_repair") != base_dataset.config.fallback_center_repair
             ):
                 raise ValueError(f"AUTSL cache settings differ from {manifest_path}")
 
@@ -81,21 +88,40 @@ class CachedTIDDataset(Dataset):
                 self.cache_dir = kaggle_cache
 
         self.valid_samples: list[int] = []
+        self._cache_paths: dict[int, Path] = {}
+        self._landmark_cache: dict[int, tuple[np.ndarray, int]] = {}
         alt_drive = Path(f"/content/drive/MyDrive/BitirmeProjesi/cache/{self.cache_dir.name}")
         sample_indices = indices if indices is not None else range(len(base_dataset))
 
+        candidate_dirs: list[Path] = [
+            self.cache_dir / base_dataset.split,
+            self.cache_dir,
+        ]
+        if alt_drive.exists():
+            candidate_dirs.extend([
+                alt_drive / base_dataset.split,
+                alt_drive,
+            ])
+
+        dir_listings: list[tuple[Path, set[str]]] = []
+        for d in candidate_dirs:
+            try:
+                files = set(os.listdir(d)) if d.is_dir() else set()
+            except OSError:
+                files = set()
+            dir_listings.append((d, files))
+
         for i in sample_indices:
             metadata = base_dataset.get_metadata(i)
-            cache_path = self.cache_dir / base_dataset.split / f"{metadata.video_id}.npz"
-            if not cache_path.exists():
-                cache_path = self.cache_dir / f"{metadata.video_id}.npz"
-            if not cache_path.exists() and alt_drive.exists():
-                if (alt_drive / base_dataset.split / f"{metadata.video_id}.npz").exists():
-                    cache_path = alt_drive / base_dataset.split / f"{metadata.video_id}.npz"
-                elif (alt_drive / f"{metadata.video_id}.npz").exists():
-                    cache_path = alt_drive / f"{metadata.video_id}.npz"
-            if cache_path.exists():
+            fname = f"{metadata.video_id}.npz"
+            resolved: Optional[Path] = None
+            for d, files in dir_listings:
+                if fname in files:
+                    resolved = d / fname
+                    break
+            if resolved is not None:
                 self.valid_samples.append(i)
+                self._cache_paths[i] = resolved
 
         if base_dataset.config.name == "autsl" and len(self.valid_samples) != len(sample_indices):
             found = set(self.valid_samples)
@@ -114,8 +140,10 @@ class CachedTIDDataset(Dataset):
     def __len__(self) -> int:
         return len(self.valid_samples)
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
-        orig_index = self.valid_samples[index]
+    def _resolve_cache_path(self, orig_index: int) -> Path:
+        cached = self._cache_paths.get(orig_index)
+        if cached is not None:
+            return cached
         metadata = self.base_dataset.get_metadata(orig_index)
         cache_path = self.cache_dir / self.base_dataset.split / f"{metadata.video_id}.npz"
         if not cache_path.exists():
@@ -126,15 +154,93 @@ class CachedTIDDataset(Dataset):
                 cache_path = alt_drive / self.base_dataset.split / f"{metadata.video_id}.npz"
             elif (alt_drive / f"{metadata.video_id}.npz").exists():
                 cache_path = alt_drive / f"{metadata.video_id}.npz"
+        self._cache_paths[orig_index] = cache_path
+        return cache_path
 
-        data = np.load(str(cache_path), allow_pickle=False)
-        if self.base_dataset.config.name == "autsl":
-            if int(data["label"]) != metadata.label or int(data["num_frames"]) > self.num_frames:
-                raise ValueError(f"AUTSL cache metadata mismatch: {cache_path}")
+    def _load_landmarks_for_index(self, orig_index: int) -> tuple[np.ndarray, int]:
+        if orig_index in self._landmark_cache:
+            pose_flat, T = self._landmark_cache[orig_index]
+            return pose_flat.copy(), T
 
-        pose = data.get("pose_landmarks", np.zeros((self.num_frames, 33, 3), dtype=np.float32))
-        left_hand = data.get("left_hand_landmarks", np.zeros((self.num_frames, 21, 3), dtype=np.float32))
-        right_hand = data.get("right_hand_landmarks", np.zeros((self.num_frames, 21, 3), dtype=np.float32))
+        metadata = self.base_dataset.get_metadata(orig_index)
+        cache_path = self._resolve_cache_path(orig_index)
+        with np.load(str(cache_path), allow_pickle=False) as data:
+            if self.base_dataset.config.name == "autsl":
+                if int(data["label"]) != metadata.label or int(data["num_frames"]) > self.num_frames:
+                    raise ValueError(f"AUTSL cache metadata mismatch: {cache_path}")
+            files = set(data.files)
+            pose = data["pose_landmarks"] if "pose_landmarks" in files else np.zeros((self.num_frames, 33, 3), dtype=np.float32)
+            left_hand = data["left_hand_landmarks"] if "left_hand_landmarks" in files else np.zeros((self.num_frames, 21, 3), dtype=np.float32)
+            right_hand = data["right_hand_landmarks"] if "right_hand_landmarks" in files else np.zeros((self.num_frames, 21, 3), dtype=np.float32)
+
+        T = int(pose.shape[0])
+        combined_landmarks = np.concatenate([pose, left_hand, right_hand], axis=1)
+        pose_flat = combined_landmarks.reshape(T, -1)
+        pose_flat = self._pad_or_truncate(pose_flat, self.num_frames, self.landmark_dim).astype(np.float32, copy=False)
+        self._landmark_cache[orig_index] = (pose_flat, T)
+        return pose_flat.copy(), T
+
+    def preload_landmarks(self, max_workers: int = 8) -> None:
+        """Pose-only modunda tüm iskelet özelliklerini çok iş parçacıklı olarak RAM'e yükler."""
+        if self.load_rgb or len(self._landmark_cache) == len(self.valid_samples):
+            return
+        from concurrent.futures import ThreadPoolExecutor
+        from tqdm import tqdm
+
+        missing_indices = [idx for idx in self.valid_samples if idx not in self._landmark_cache]
+        if not missing_indices:
+            return
+        desc = f"RAM Cache ({self.base_dataset.split})"
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            list(
+                tqdm(
+                    pool.map(self._load_landmarks_for_index, missing_indices),
+                    total=len(missing_indices),
+                    desc=desc,
+                    leave=False,
+                )
+            )
+        logger.info(
+            f"Preloaded {len(self._landmark_cache)}/{len(self.valid_samples)} "
+            f"pose landmark sequences into RAM for '{self.base_dataset.split}' split."
+        )
+
+    def __getitem__(self, index: int) -> Dict[str, Any]:
+        orig_index = self.valid_samples[index]
+        metadata = self.base_dataset.get_metadata(orig_index)
+
+        if not self.load_rgb:
+            pose_flat, T = self._load_landmarks_for_index(orig_index)
+            actual_frames = min(T, self.num_frames)
+            mask = np.zeros(self.num_frames, dtype=np.bool_)
+            mask[:actual_frames] = True
+
+            sample: Dict[str, Any] = {
+                "pose_landmarks": torch.from_numpy(pose_flat).float(),
+                "labels": torch.tensor(metadata.label, dtype=torch.long),
+                "video_ids": metadata.video_id,
+                "mask": torch.from_numpy(mask),
+            }
+            if self.augment is not None:
+                sample = self.augment(sample)
+            return sample
+
+        cache_path = self._resolve_cache_path(orig_index)
+        with np.load(str(cache_path), allow_pickle=False) as data:
+            if self.base_dataset.config.name == "autsl":
+                if int(data["label"]) != metadata.label or int(data["num_frames"]) > self.num_frames:
+                    raise ValueError(f"AUTSL cache metadata mismatch: {cache_path}")
+
+            files = set(data.files)
+            if self.base_dataset.config.name == "autsl" and (
+                "left_hand_crops" not in files or "right_hand_crops" not in files
+            ):
+                raise ValueError(f"AUTSL RGB cache is missing hand crops: {cache_path}")
+            pose = data["pose_landmarks"] if "pose_landmarks" in files else np.zeros((self.num_frames, 33, 3), dtype=np.float32)
+            left_hand = data["left_hand_landmarks"] if "left_hand_landmarks" in files else np.zeros((self.num_frames, 21, 3), dtype=np.float32)
+            right_hand = data["right_hand_landmarks"] if "right_hand_landmarks" in files else np.zeros((self.num_frames, 21, 3), dtype=np.float32)
+            left_crops = data["left_hand_crops"] if "left_hand_crops" in files else np.zeros((self.num_frames, *self.hand_image_size, 3), dtype=np.uint8)
+            right_crops = data["right_hand_crops"] if "right_hand_crops" in files else np.zeros((self.num_frames, *self.hand_image_size, 3), dtype=np.uint8)
 
         T = pose.shape[0]
         # Concat along the joints (V) dimension -> (T, 33+21+21, 3) = (T, 75, 3)
@@ -143,9 +249,6 @@ class CachedTIDDataset(Dataset):
         # Flatten to (T, 75*3=225)
         pose_flat = combined_landmarks.reshape(T, -1)
         pose_flat = self._pad_or_truncate(pose_flat, self.num_frames, self.landmark_dim)
-
-        left_crops = data.get("left_hand_crops", np.zeros((self.num_frames, *self.hand_image_size, 3), dtype=np.uint8))
-        right_crops = data.get("right_hand_crops", np.zeros((self.num_frames, *self.hand_image_size, 3), dtype=np.uint8))
 
         # Çözünürlük farklıysa yeniden boyutlandır
         left_crops = self._resize_crops(left_crops)
@@ -232,12 +335,22 @@ class TIDDataModule(BaseDataModule):
         augmentation_config: Optional[AugmentationConfig] = None,
         hand_image_size: tuple[int, int] = (160, 160),
         landmark_dim: int = 225,
+        load_rgb: bool = True,
     ) -> None:
         super().__init__(dataset_config, training_config, collate_fn=collate_fn)
         self.cache_dir = cache_dir
         self.augmentation_config = augmentation_config
         self.hand_image_size = hand_image_size
         self.landmark_dim = landmark_dim
+        self.load_rgb = load_rgb
+
+    def preload_landmarks(self, max_workers: int = 8) -> None:
+        """Pose-only modunda aktif veri kümelerinin iskelet özelliklerini RAM'e önyükler."""
+        if self.load_rgb:
+            return
+        for ds in (self._train_dataset, self._val_dataset, self._test_dataset):
+            if ds is not None:
+                ds.preload_landmarks(max_workers=max_workers)
 
     def setup(self, stage: Optional[str] = None) -> None:
         num_frames = self.dataset_config.num_frames
@@ -260,19 +373,22 @@ class TIDDataModule(BaseDataModule):
 
             train_aug = build_cache_augmentation(self.augmentation_config, self.dataset_config.train_split) if self.augmentation_config else None
             self._train_dataset = CachedTIDDataset(
-                train_base, self.cache_dir, num_frames, self.landmark_dim, self.hand_image_size, train_aug
+                train_base, self.cache_dir, num_frames, self.landmark_dim, self.hand_image_size, train_aug,
+                load_rgb=self.load_rgb,
             )
 
         if stage in (None, "fit", "validate"):
             val_base = TIDDataset(self.dataset_config, self.dataset_config.val_split)
             self._val_dataset = CachedTIDDataset(
-                val_base, self.cache_dir, num_frames, self.landmark_dim, self.hand_image_size
+                val_base, self.cache_dir, num_frames, self.landmark_dim, self.hand_image_size,
+                load_rgb=self.load_rgb,
             )
 
         if stage in (None, "test") or (stage == "fit" and self.dataset_config.name != "autsl"):
             test_base = TIDDataset(self.dataset_config, self.dataset_config.test_split)
             self._test_dataset = CachedTIDDataset(
-                test_base, self.cache_dir, num_frames, self.landmark_dim, self.hand_image_size
+                test_base, self.cache_dir, num_frames, self.landmark_dim, self.hand_image_size,
+                load_rgb=self.load_rgb,
             )
 
     def setup_fold(self, train_indices: List[int], val_indices: List[int]) -> None:
@@ -296,19 +412,20 @@ class TIDDataModule(BaseDataModule):
         train_aug = build_cache_augmentation(self.augmentation_config, self.dataset_config.train_split) if self.augmentation_config else None
         self._train_dataset = CachedTIDDataset(
             train_base, self.cache_dir, num_frames, self.landmark_dim, self.hand_image_size,
-            augment=train_aug, indices=train_indices
+            augment=train_aug, indices=train_indices, load_rgb=self.load_rgb,
         )
 
         # Val katı: augmentasyonsuz temiz değerlendirme
         self._val_dataset = CachedTIDDataset(
             train_base, self.cache_dir, num_frames, self.landmark_dim, self.hand_image_size,
-            augment=None, indices=val_indices
+            augment=None, indices=val_indices, load_rgb=self.load_rgb,
         )
 
         # Kilitli Test seti: her zaman bağımsız test splitini kullanır
         test_base = TIDDataset(self.dataset_config, self.dataset_config.test_split)
         self._test_dataset = CachedTIDDataset(
-            test_base, self.cache_dir, num_frames, self.landmark_dim, self.hand_image_size
+            test_base, self.cache_dir, num_frames, self.landmark_dim, self.hand_image_size,
+            load_rgb=self.load_rgb,
         )
 
 

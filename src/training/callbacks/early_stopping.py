@@ -49,6 +49,13 @@ class EarlyStoppingCallback(BaseCallback):
         self.counter = 0
         self.best_value: Optional[float] = None
 
+    def on_train_start(self, trainer: Any) -> None:
+        """Restore best_value from trainer when resuming from a checkpoint."""
+        if getattr(trainer, "current_epoch", 0) > 0 and self.best_value is None:
+            best_metric = getattr(trainer, "best_metric", 0.0)
+            if best_metric > 0.0:
+                self.best_value = best_metric
+
     def on_validation_end(
         self,
         trainer: Any,

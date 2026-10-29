@@ -1,0 +1,925 @@
+{
+  "purpose": "preprocessing quality audit; no model training in this phase",
+  "selection": "existing 10 pilot IDs plus 90 uniformly sampled from remaining train class IDs",
+  "random_seed": 20261021,
+  "pilot_10_source_class_ids": [
+    8,
+    14,
+    15,
+    20,
+    64,
+    106,
+    114,
+    143,
+    144,
+    196
+  ],
+  "source_train_labels_sha256": "13ab78789655d5ccde3a056968bc3c3433002a459d9ae383822bab5223e7b86c",
+  "source_class_list_sha256": "43b4627505d1775be5c8cc95decc6ce8ed0f8fe39cfc42973d7af8f7d257403a",
+  "source_class_ids": [
+    0,
+    2,
+    3,
+    4,
+    7,
+    8,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    20,
+    21,
+    22,
+    25,
+    27,
+    28,
+    29,
+    30,
+    31,
+    33,
+    34,
+    40,
+    43,
+    44,
+    47,
+    49,
+    56,
+    59,
+    60,
+    62,
+    63,
+    64,
+    66,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    76,
+    77,
+    82,
+    83,
+    85,
+    88,
+    89,
+    96,
+    98,
+    100,
+    102,
+    103,
+    106,
+    107,
+    108,
+    109,
+    110,
+    114,
+    115,
+    125,
+    130,
+    139,
+    141,
+    142,
+    143,
+    144,
+    148,
+    151,
+    153,
+    154,
+    157,
+    159,
+    163,
+    168,
+    169,
+    170,
+    172,
+    173,
+    175,
+    181,
+    183,
+    186,
+    189,
+    192,
+    194,
+    196,
+    197,
+    199,
+    201,
+    202,
+    203,
+    206,
+    207,
+    208,
+    218,
+    219,
+    220,
+    224
+  ],
+  "expected_train_videos": 12405,
+  "expected_val_videos": 1963,
+  "classes": [
+    {
+      "model_index": 0,
+      "source_class_id": 0,
+      "tr": "abla",
+      "en": "sister",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 1,
+      "source_class_id": 2,
+      "tr": "acikmak",
+      "en": "hungry",
+      "train_videos": 123,
+      "val_videos": 20
+    },
+    {
+      "model_index": 2,
+      "source_class_id": 3,
+      "tr": "afiyet_olsun",
+      "en": "enjoy_your_meal",
+      "train_videos": 123,
+      "val_videos": 19
+    },
+    {
+      "model_index": 3,
+      "source_class_id": 4,
+      "tr": "agabey",
+      "en": "brother",
+      "train_videos": 125,
+      "val_videos": 20
+    },
+    {
+      "model_index": 4,
+      "source_class_id": 7,
+      "tr": "aglamak",
+      "en": "cry",
+      "train_videos": 122,
+      "val_videos": 20
+    },
+    {
+      "model_index": 5,
+      "source_class_id": 8,
+      "tr": "aile",
+      "en": "family",
+      "train_videos": 125,
+      "val_videos": 20
+    },
+    {
+      "model_index": 6,
+      "source_class_id": 12,
+      "tr": "alisveris",
+      "en": "shopping",
+      "train_videos": 127,
+      "val_videos": 19
+    },
+    {
+      "model_index": 7,
+      "source_class_id": 13,
+      "tr": "anahtar",
+      "en": "key",
+      "train_videos": 124,
+      "val_videos": 20
+    },
+    {
+      "model_index": 8,
+      "source_class_id": 14,
+      "tr": "anne",
+      "en": "mother",
+      "train_videos": 119,
+      "val_videos": 20
+    },
+    {
+      "model_index": 9,
+      "source_class_id": 15,
+      "tr": "arkadas",
+      "en": "friend",
+      "train_videos": 121,
+      "val_videos": 20
+    },
+    {
+      "model_index": 10,
+      "source_class_id": 16,
+      "tr": "ataturk",
+      "en": "ataturk",
+      "train_videos": 108,
+      "val_videos": 20
+    },
+    {
+      "model_index": 11,
+      "source_class_id": 17,
+      "tr": "ayakkabi",
+      "en": "shoe",
+      "train_videos": 123,
+      "val_videos": 18
+    },
+    {
+      "model_index": 12,
+      "source_class_id": 18,
+      "tr": "ayna",
+      "en": "mirror",
+      "train_videos": 120,
+      "val_videos": 17
+    },
+    {
+      "model_index": 13,
+      "source_class_id": 20,
+      "tr": "baba",
+      "en": "father",
+      "train_videos": 125,
+      "val_videos": 19
+    },
+    {
+      "model_index": 14,
+      "source_class_id": 21,
+      "tr": "bahce",
+      "en": "garden",
+      "train_videos": 125,
+      "val_videos": 19
+    },
+    {
+      "model_index": 15,
+      "source_class_id": 22,
+      "tr": "bakmak",
+      "en": "look",
+      "train_videos": 122,
+      "val_videos": 20
+    },
+    {
+      "model_index": 16,
+      "source_class_id": 25,
+      "tr": "bayrak",
+      "en": "flag",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 17,
+      "source_class_id": 27,
+      "tr": "bebek",
+      "en": "baby",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 18,
+      "source_class_id": 28,
+      "tr": "bekar",
+      "en": "single",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 19,
+      "source_class_id": 29,
+      "tr": "beklemek",
+      "en": "wait",
+      "train_videos": 125,
+      "val_videos": 20
+    },
+    {
+      "model_index": 20,
+      "source_class_id": 30,
+      "tr": "ben",
+      "en": "I",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 21,
+      "source_class_id": 31,
+      "tr": "benzin",
+      "en": "petrol",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 22,
+      "source_class_id": 33,
+      "tr": "bilgi_vermek",
+      "en": "inform",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 23,
+      "source_class_id": 34,
+      "tr": "biz",
+      "en": "we",
+      "train_videos": 118,
+      "val_videos": 20
+    },
+    {
+      "model_index": 24,
+      "source_class_id": 40,
+      "tr": "cekic",
+      "en": "hammer",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 25,
+      "source_class_id": 43,
+      "tr": "corba",
+      "en": "soup",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 26,
+      "source_class_id": 44,
+      "tr": "cuma",
+      "en": "friday",
+      "train_videos": 126,
+      "val_videos": 19
+    },
+    {
+      "model_index": 27,
+      "source_class_id": 47,
+      "tr": "dakika",
+      "en": "minute",
+      "train_videos": 124,
+      "val_videos": 20
+    },
+    {
+      "model_index": 28,
+      "source_class_id": 49,
+      "tr": "degistirmek",
+      "en": "change",
+      "train_videos": 127,
+      "val_videos": 19
+    },
+    {
+      "model_index": 29,
+      "source_class_id": 56,
+      "tr": "dusman",
+      "en": "enemy",
+      "train_videos": 123,
+      "val_videos": 19
+    },
+    {
+      "model_index": 30,
+      "source_class_id": 59,
+      "tr": "eldiven",
+      "en": "glove",
+      "train_videos": 122,
+      "val_videos": 18
+    },
+    {
+      "model_index": 31,
+      "source_class_id": 60,
+      "tr": "emek",
+      "en": "labor",
+      "train_videos": 123,
+      "val_videos": 20
+    },
+    {
+      "model_index": 32,
+      "source_class_id": 62,
+      "tr": "erkek",
+      "en": "male",
+      "train_videos": 125,
+      "val_videos": 19
+    },
+    {
+      "model_index": 33,
+      "source_class_id": 63,
+      "tr": "et",
+      "en": "meal",
+      "train_videos": 120,
+      "val_videos": 19
+    },
+    {
+      "model_index": 34,
+      "source_class_id": 64,
+      "tr": "ev",
+      "en": "house",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 35,
+      "source_class_id": 66,
+      "tr": "evli",
+      "en": "married",
+      "train_videos": 122,
+      "val_videos": 20
+    },
+    {
+      "model_index": 36,
+      "source_class_id": 69,
+      "tr": "fotograf",
+      "en": "photograph",
+      "train_videos": 124,
+      "val_videos": 18
+    },
+    {
+      "model_index": 37,
+      "source_class_id": 70,
+      "tr": "futbol",
+      "en": "football",
+      "train_videos": 121,
+      "val_videos": 20
+    },
+    {
+      "model_index": 38,
+      "source_class_id": 71,
+      "tr": "gecmis",
+      "en": "past",
+      "train_videos": 124,
+      "val_videos": 20
+    },
+    {
+      "model_index": 39,
+      "source_class_id": 72,
+      "tr": "gecmis_olsun",
+      "en": "get_well",
+      "train_videos": 124,
+      "val_videos": 19
+    },
+    {
+      "model_index": 40,
+      "source_class_id": 73,
+      "tr": "getirmek",
+      "en": "bring",
+      "train_videos": 124,
+      "val_videos": 19
+    },
+    {
+      "model_index": 41,
+      "source_class_id": 74,
+      "tr": "gol",
+      "en": "lake",
+      "train_videos": 122,
+      "val_videos": 20
+    },
+    {
+      "model_index": 42,
+      "source_class_id": 76,
+      "tr": "gormek",
+      "en": "see",
+      "train_videos": 122,
+      "val_videos": 19
+    },
+    {
+      "model_index": 43,
+      "source_class_id": 77,
+      "tr": "gostermek",
+      "en": "show",
+      "train_videos": 125,
+      "val_videos": 20
+    },
+    {
+      "model_index": 44,
+      "source_class_id": 82,
+      "tr": "hasta",
+      "en": "ill",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 45,
+      "source_class_id": 83,
+      "tr": "hastane",
+      "en": "hospital",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 46,
+      "source_class_id": 85,
+      "tr": "havlu",
+      "en": "towel",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 47,
+      "source_class_id": 88,
+      "tr": "hayvan",
+      "en": "animal",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 48,
+      "source_class_id": 89,
+      "tr": "hediye",
+      "en": "gift",
+      "train_videos": 123,
+      "val_videos": 17
+    },
+    {
+      "model_index": 49,
+      "source_class_id": 96,
+      "tr": "ilac",
+      "en": "medicine",
+      "train_videos": 123,
+      "val_videos": 17
+    },
+    {
+      "model_index": 50,
+      "source_class_id": 98,
+      "tr": "isik",
+      "en": "light",
+      "train_videos": 121,
+      "val_videos": 19
+    },
+    {
+      "model_index": 51,
+      "source_class_id": 100,
+      "tr": "iyi",
+      "en": "good",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 52,
+      "source_class_id": 102,
+      "tr": "kahvalti",
+      "en": "breakfast",
+      "train_videos": 125,
+      "val_videos": 19
+    },
+    {
+      "model_index": 53,
+      "source_class_id": 103,
+      "tr": "kalem",
+      "en": "pencil",
+      "train_videos": 125,
+      "val_videos": 20
+    },
+    {
+      "model_index": 54,
+      "source_class_id": 106,
+      "tr": "kardes",
+      "en": "sibling",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 55,
+      "source_class_id": 107,
+      "tr": "kavsak",
+      "en": "crossroads",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 56,
+      "source_class_id": 108,
+      "tr": "kaza",
+      "en": "accident",
+      "train_videos": 125,
+      "val_videos": 20
+    },
+    {
+      "model_index": 57,
+      "source_class_id": 109,
+      "tr": "kemer",
+      "en": "belt",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 58,
+      "source_class_id": 110,
+      "tr": "keske",
+      "en": "if_only",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 59,
+      "source_class_id": 114,
+      "tr": "kitap",
+      "en": "book",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 60,
+      "source_class_id": 115,
+      "tr": "kiyma",
+      "en": "mince",
+      "train_videos": 119,
+      "val_videos": 17
+    },
+    {
+      "model_index": 61,
+      "source_class_id": 125,
+      "tr": "maas",
+      "en": "salary",
+      "train_videos": 124,
+      "val_videos": 20
+    },
+    {
+      "model_index": 62,
+      "source_class_id": 130,
+      "tr": "memnun_olmak",
+      "en": "be_pleased",
+      "train_videos": 125,
+      "val_videos": 20
+    },
+    {
+      "model_index": 63,
+      "source_class_id": 139,
+      "tr": "nine",
+      "en": "grandmother",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 64,
+      "source_class_id": 141,
+      "tr": "oda",
+      "en": "room",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 65,
+      "source_class_id": 142,
+      "tr": "odun",
+      "en": "wood",
+      "train_videos": 124,
+      "val_videos": 20
+    },
+    {
+      "model_index": 66,
+      "source_class_id": 143,
+      "tr": "ogretmen",
+      "en": "teacher",
+      "train_videos": 124,
+      "val_videos": 20
+    },
+    {
+      "model_index": 67,
+      "source_class_id": 144,
+      "tr": "okul",
+      "en": "school",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 68,
+      "source_class_id": 148,
+      "tr": "onlar",
+      "en": "they",
+      "train_videos": 124,
+      "val_videos": 20
+    },
+    {
+      "model_index": 69,
+      "source_class_id": 151,
+      "tr": "ozur_dilemek",
+      "en": "apologize",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 70,
+      "source_class_id": 153,
+      "tr": "pantolon",
+      "en": "trousers",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 71,
+      "source_class_id": 154,
+      "tr": "para",
+      "en": "money",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 72,
+      "source_class_id": 157,
+      "tr": "pazar",
+      "en": "sunday",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 73,
+      "source_class_id": 159,
+      "tr": "pencere",
+      "en": "window",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 74,
+      "source_class_id": 163,
+      "tr": "psikoloji",
+      "en": "psychology",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 75,
+      "source_class_id": 168,
+      "tr": "sali",
+      "en": "tuesday",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 76,
+      "source_class_id": 169,
+      "tr": "sampiyon",
+      "en": "champion",
+      "train_videos": 124,
+      "val_videos": 20
+    },
+    {
+      "model_index": 77,
+      "source_class_id": 170,
+      "tr": "sapka",
+      "en": "hat",
+      "train_videos": 127,
+      "val_videos": 19
+    },
+    {
+      "model_index": 78,
+      "source_class_id": 172,
+      "tr": "seker",
+      "en": "sugar",
+      "train_videos": 90,
+      "val_videos": 20
+    },
+    {
+      "model_index": 79,
+      "source_class_id": 173,
+      "tr": "selam",
+      "en": "hi",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 80,
+      "source_class_id": 175,
+      "tr": "sen",
+      "en": "you",
+      "train_videos": 124,
+      "val_videos": 18
+    },
+    {
+      "model_index": 81,
+      "source_class_id": 181,
+      "tr": "sinir",
+      "en": "border",
+      "train_videos": 124,
+      "val_videos": 20
+    },
+    {
+      "model_index": 82,
+      "source_class_id": 183,
+      "tr": "soylemek",
+      "en": "say",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 83,
+      "source_class_id": 186,
+      "tr": "tamam",
+      "en": "okay",
+      "train_videos": 96,
+      "val_videos": 20
+    },
+    {
+      "model_index": 84,
+      "source_class_id": 189,
+      "tr": "tatil",
+      "en": "holiday",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 85,
+      "source_class_id": 192,
+      "tr": "tehlike",
+      "en": "danger",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 86,
+      "source_class_id": 194,
+      "tr": "terazi",
+      "en": "scales",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 87,
+      "source_class_id": 196,
+      "tr": "tesekkur",
+      "en": "thanks",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 88,
+      "source_class_id": 197,
+      "tr": "tornavida",
+      "en": "screwdriver",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 89,
+      "source_class_id": 199,
+      "tr": "turuncu",
+      "en": "orange",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 90,
+      "source_class_id": 201,
+      "tr": "un",
+      "en": "flour",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 91,
+      "source_class_id": 202,
+      "tr": "uzak",
+      "en": "far",
+      "train_videos": 126,
+      "val_videos": 20
+    },
+    {
+      "model_index": 92,
+      "source_class_id": 203,
+      "tr": "uzgun",
+      "en": "sad",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 93,
+      "source_class_id": 206,
+      "tr": "yakin",
+      "en": "near",
+      "train_videos": 120,
+      "val_videos": 18
+    },
+    {
+      "model_index": 94,
+      "source_class_id": 207,
+      "tr": "yalniz",
+      "en": "alone",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 95,
+      "source_class_id": 208,
+      "tr": "yanlis",
+      "en": "wrong",
+      "train_videos": 125,
+      "val_videos": 20
+    },
+    {
+      "model_index": 96,
+      "source_class_id": 218,
+      "tr": "yemek_pisirmek",
+      "en": "cook",
+      "train_videos": 123,
+      "val_videos": 20
+    },
+    {
+      "model_index": 97,
+      "source_class_id": 219,
+      "tr": "yildiz",
+      "en": "star",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 98,
+      "source_class_id": 220,
+      "tr": "yok",
+      "en": "absent",
+      "train_videos": 127,
+      "val_videos": 20
+    },
+    {
+      "model_index": 99,
+      "source_class_id": 224,
+      "tr": "zaman",
+      "en": "time",
+      "train_videos": 123,
+      "val_videos": 20
+    }
+  ]
+}

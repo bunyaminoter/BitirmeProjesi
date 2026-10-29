@@ -1,0 +1,7 @@
+{
+  "method": "short_gap_bbox_linear_if_disagree",
+  "max_gap": 2,
+  "max_wrist_distance": 0.12,
+  "max_anchor_step_ratio": 1.0,
+  "min_disagreement_ratio": 1.0
+}

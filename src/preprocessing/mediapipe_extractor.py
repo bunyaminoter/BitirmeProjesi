@@ -292,7 +292,8 @@ class MediaPipeLandmarkExtractor(BaseLandmarkExtractor):
                             hand_result.hand_landmarks[i], 21
                         )
                         # AUTSL RGB frames are passed without horizontal mirroring.
-                        # Keep MediaPipe's handedness aligned with pose wrists.
+                        # Handedness is used directly; pose wrists do not reconcile
+                        # left/right identity when the hands overlap.
                         if hand_label == "left":
                             left_hand_landmarks = hand_lm
                         elif hand_label == "right":

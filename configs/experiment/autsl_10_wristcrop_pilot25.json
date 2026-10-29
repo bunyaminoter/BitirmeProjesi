@@ -1,0 +1,31 @@
+{
+  "train": [
+    "signer2_sample530_color",
+    "signer2_sample1234_color",
+    "signer2_sample1356_color",
+    "signer7_sample879_color",
+    "signer8_sample1539_color",
+    "signer12_sample615_color",
+    "signer12_sample934_color",
+    "signer17_sample360_color",
+    "signer22_sample106_color",
+    "signer23_sample354_color",
+    "signer28_sample424_color",
+    "signer33_sample505_color",
+    "signer36_sample228_color"
+  ],
+  "val": [
+    "signer1_sample569_color",
+    "signer35_sample539_color",
+    "signer11_sample43_color",
+    "signer11_sample222_color",
+    "signer11_sample342_color",
+    "signer16_sample184_color",
+    "signer18_sample40_color",
+    "signer18_sample97_color",
+    "signer18_sample508_color",
+    "signer18_sample521_color",
+    "signer18_sample563_color",
+    "signer25_sample361_color"
+  ]
+}

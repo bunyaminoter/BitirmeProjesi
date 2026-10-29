@@ -1,0 +1,23 @@
+# Preprocessing input only. This file does not select the 226-class model.
+# Official train/val, 16 uniform frames, full 0..225 source labels.
+name: autsl_226_preprocess_base16
+seed: 7
+device: auto
+output_dir: outputs/autsl_226_preprocess_base16/
+dataset:
+  name: autsl
+  annotation_file: data/autsl
+  data_dir: data/autsl
+  video_dir: data/autsl
+  num_classes: 226
+  class_ids: null
+  num_frames: 16
+  cache_dir: cache/autsl_226_features_base16
+  class_list_file: data/autsl/autsl_class_list_226.txt
+  train_split: train
+  val_split: val
+  test_split: test
+model:
+  num_classes: 226
+  hand_encoder:
+    input_size: [160, 160]

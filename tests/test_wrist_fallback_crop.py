@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from src.preprocessing.wrist_fallback_crop import (
     SOURCE_DETECTED, SOURCE_POSE_FALLBACK, SOURCE_UNCHANGED, fallback_crops, square_crop,
@@ -37,3 +38,26 @@ def test_square_crop_keeps_scale_and_pads_outside_black():
     crop = square_crop(frame, np.array([0.0, 25.0]), 20.0, (20, 20))
     assert crop.shape == (20, 20, 3)
     assert crop[:, :9].max() == 0 and crop[:, 11:].min() == 255
+
+
+def test_scale_recovers_edge_content_only_on_missing_frames():
+    frames = [np.zeros((100, 200, 3), np.uint8) for _ in range(3)]
+    frames[1][47:53, 117:120] = 255  # outside original box; inside 1.5x box
+    crops = np.full((3, 32, 32, 3), 7, np.uint8)
+    hands = np.zeros((3, 21, 3), np.float32)
+    hands[:, :, 0] = np.linspace(.45, .55, 21)
+    hands[:, :, 1] = np.linspace(.4, .6, 21)
+    pose = np.full((3, 33, 3), .5, np.float32)
+    observed = np.array([True, False, True])
+    args = (frames, crops, hands, observed, pose, np.ones(3, bool), "left")
+    old, old_sources = fallback_crops(*args)
+    new, sources = fallback_crops(*args, box_scale=1.5)
+    assert old[1].max() == 0 and new[1].max() > 0
+    assert np.array_equal(new[observed], crops[observed])
+    assert np.array_equal(sources, old_sources)
+
+
+@pytest.mark.parametrize("scale", [0, -1, np.nan, np.inf])
+def test_invalid_scale_is_rejected(scale):
+    with pytest.raises(ValueError, match="finite and positive"):
+        fallback_crops([], None, None, None, None, None, "left", box_scale=scale)

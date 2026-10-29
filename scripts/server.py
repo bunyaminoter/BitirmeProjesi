@@ -33,8 +33,7 @@ sys.path.insert(0, str(project_root))
 
 from src.core.config import load_config
 from src.models.hybrid_model import HybridASLModel
-from src.preprocessing.hand_cropper import HandCropper
-from src.preprocessing.mediapipe_extractor import MediaPipeLandmarkExtractor
+from src.preprocessing.inference_pipeline import prepare_inference_batch, sample_video_frames
 from src.utils.device import get_device
 from src.utils.logging import get_logger, setup_logging
 
@@ -73,23 +72,12 @@ class PredictionResponse(BaseModel):
 
 
 def load_class_names(class_list_file: str) -> Dict[int, str]:
-    """Load class index to class name mapping with fallback defaults."""
-    default_10_classes = [
-        "BITE1",
-        "BREAKFAST1",
-        "DARK1",
-        "DEAF1",
-        "DECIDE1",
-        "DEMAND1",
-        "DOG1",
-        "HURDLE/TRIP1",
-        "ROCKINGCHAIR1",
-        "WHATFOR1",
-    ]
+    """Load AUTSL class names and stop if their mapping is unavailable."""
     path = Path(class_list_file)
-    if not path.exists():
-        # Fallback to default 10 baseline classes if file is not found
-        return {idx: name for idx, name in enumerate(default_10_classes)}
+    if not path.is_absolute():
+        path = project_root / path
+    if not path.is_file():
+        raise FileNotFoundError(f"AUTSL class list missing: {path}")
 
     mapping = {}
     with open(path, "r", encoding="utf-8") as f:
@@ -102,7 +90,7 @@ def load_class_names(class_list_file: str) -> Dict[int, str]:
                 mapping[int(parts[0])] = parts[1]
 
     if not mapping:
-        return {idx: name for idx, name in enumerate(default_10_classes)}
+        raise ValueError(f"Empty AUTSL class list: {path}")
 
     return mapping
 
@@ -114,29 +102,7 @@ def sample_frames_from_bytes(video_bytes: bytes, num_frames: int) -> List[np.nda
         tmp_path = tmp.name
 
     try:
-        cap = cv2.VideoCapture(tmp_path)
-        if not cap.isOpened():
-            return []
-
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if total <= 0:
-            cap.release()
-            return []
-
-        if total <= num_frames:
-            indices = list(range(total))
-        else:
-            indices = np.linspace(0, total - 1, num_frames, dtype=int).tolist()
-
-        frames = []
-        for idx in indices:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-            ret, frame = cap.read()
-            if ret:
-                frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-
-        cap.release()
-        return frames
+        return sample_video_frames(tmp_path, num_frames)
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
@@ -147,68 +113,7 @@ def run_model_inference(frames: List[np.ndarray], top_k_val: int = 5) -> List[Di
     if not frames or model is None or config is None:
         return []
 
-    num_frames = config.dataset.num_frames
-
-    extractor = MediaPipeLandmarkExtractor(
-        enable_face=config.model.landmark_encoder.include_face,
-    )
-    cropper = HandCropper(
-        output_size=tuple(config.model.hand_encoder.input_size),
-        padding_ratio=0.2,
-    )
-
-    all_pose = []
-    all_left_crops = []
-    all_right_crops = []
-
-    for frame in frames:
-        result = extractor.extract(frame)
-
-        if result.pose is not None:
-            all_pose.append(result.pose.reshape(-1))
-        else:
-            all_pose.append(np.zeros(33 * 3, dtype=np.float32))
-
-        left_crop, right_crop = cropper.crop_hands(frame, result)
-        all_left_crops.append(left_crop.image)
-        all_right_crops.append(right_crop.image)
-
-    extractor.close()
-
-    def pad_list(lst: list, target_len: int, default_fn):
-        while len(lst) < target_len:
-            lst.append(default_fn())
-        return lst[:target_len]
-
-    lm_dim = config.model.landmark_encoder.input_dim
-    all_pose = pad_list(all_pose, num_frames, lambda: np.zeros(lm_dim, dtype=np.float32))
-
-    h, w = config.model.hand_encoder.input_size
-    all_left_crops = pad_list(all_left_crops, num_frames, lambda: np.zeros((h, w, 3), dtype=np.uint8))
-    all_right_crops = pad_list(all_right_crops, num_frames, lambda: np.zeros((h, w, 3), dtype=np.uint8))
-
-    pose_tensor = torch.from_numpy(
-        np.stack(all_pose, axis=0)
-    ).float().unsqueeze(0).to(device)
-
-    left_imgs = np.stack(all_left_crops, axis=0).astype(np.float32) / 255.0
-    left_imgs = left_imgs.transpose(0, 3, 1, 2)
-    left_tensor = torch.from_numpy(left_imgs).float().unsqueeze(0).to(device)
-
-    right_imgs = np.stack(all_right_crops, axis=0).astype(np.float32) / 255.0
-    right_imgs = right_imgs.transpose(0, 3, 1, 2)
-    right_tensor = torch.from_numpy(right_imgs).float().unsqueeze(0).to(device)
-
-    mask = torch.ones(1, num_frames, dtype=torch.bool, device=device)
-    if len(frames) < num_frames:
-        mask[0, len(frames):] = False
-
-    batch = {
-        "pose_landmarks": pose_tensor,
-        "left_hand_images": left_tensor,
-        "right_hand_images": right_tensor,
-        "mask": mask,
-    }
+    batch = prepare_inference_batch(frames, config, device)
 
     with torch.no_grad():
         logits = model(batch)
@@ -397,20 +302,16 @@ def init_server(config_path: str, checkpoint_path: str):
     model.to(device)
 
     chk_path = Path(checkpoint_path)
-    if not chk_path.exists():
-        logger.warning(f"Checkpoint file not found at: {checkpoint_path}. Searching default paths...")
-        fallback = Path("outputs/autsl_10_mobilenet/checkpoints/best_model.pt")
-        if fallback.exists():
-            chk_path = fallback
-
-    logger.info(f"Loading model weights from: {chk_path}")
     try:
+        if not chk_path.is_file():
+            raise FileNotFoundError(chk_path)
         checkpoint = torch.load(chk_path, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()
         logger.info("Model loaded and ready for predictions!")
-    except Exception as e:
-        logger.error(f"Error loading checkpoint weights: {e}")
+    except Exception:
+        model = None
+        raise
 
 
 def main():
